@@ -153,12 +153,10 @@ INSERT INTO orders (user_id, product, amount) VALUES
      -- In another session
      UPDATE users SET age = age - 1 WHERE id = 1;
      ```
-
-13. **使用非sargable操作**: 
-   - 测试样例: 执行一个包含非sargable操作的查询。
-   
+13. **使用不推荐的PAGLOCK查询提示**:
+   - 测试样例:
      ```sql
-     SELECT * FROM users WHERE YEAR(CAST(email AS DATE)) = 2023;
+     SELECT * FROM users WITH (PAGLOCK) WHERE name = '李四';
      ```
 
 14. **数据分布不均**: 
@@ -237,11 +235,7 @@ INSERT INTO orders (user_id, product, amount) VALUES
      SELECT * FROM users_view WITH (NOEXPAND);
      ```
 
-26. **使用不推荐的PAGLOCK查询提示**:
-   - 测试样例:
-     ```sql
-     SELECT * FROM users WITH (PAGLOCK) WHERE name = '李四';
-     ```
+
 
 
 
