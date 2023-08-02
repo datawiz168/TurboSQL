@@ -201,11 +201,10 @@ INSERT INTO orders (user_id, product, amount) VALUES
      ```sql
      EXEC xp_logevent 60000, 'Test Message';
      ```
-
-20. **使用非sargable操作**:
+20. **使用不推荐的ROWLOCK查询提示**:
    - 测试样例:
      ```sql
-     SELECT * FROM users WHERE YEAR(CAST(email AS DATE)) = 2023;
+     SELECT * FROM users WITH (ROWLOCK) WHERE email = 'lisi@example.com';
      ```
 
 21. **使用不推荐的NOLOCK查询提示**:
@@ -244,11 +243,7 @@ INSERT INTO orders (user_id, product, amount) VALUES
      SELECT * FROM users WITH (PAGLOCK) WHERE name = '李四';
      ```
 
-27. **使用不推荐的ROWLOCK查询提示**:
-   - 测试样例:
-     ```sql
-     SELECT * FROM users WITH (ROWLOCK) WHERE email = 'lisi@example.com';
-     ```
+
 
 这些测试样例基于`sql_query_audit.py`文件中的规则提供了不同的情境。
 
