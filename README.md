@@ -123,13 +123,6 @@ INSERT INTO orders (user_id, product, amount) VALUES
      CREATE INDEX idx_no_page_locks ON users(email) WITH (ALLOW_PAGE_LOCKS = OFF);
      ```
 
-8. **索引的列数**: 检查包含超过5个列的索引。
-   - 测试样例: 创建一个包含多个列的索引，并检查它是否被标识。
-
-     ```sql
-     CREATE INDEX idx_many_columns ON users(id, name, email, age, email, name);
-     ```
-
 这些测试样例提供了基于`indexes_audit.py`文件中的规则的不同情况。
 
 `execution_plan_audit.py` 文件中定义了多个规则来审查SQL查询的执行计划。以下是一些提到的规则及其对应的测试样例建议：
