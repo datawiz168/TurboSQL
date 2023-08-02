@@ -67,9 +67,12 @@ INSERT INTO orders (user_id, product, amount) VALUES
 ```
 
 5. **提供的 SQL 查询**:
-    - 全表扫描的查询：`SELECT * FROM users WHERE age > 18`。
-    - 使用了 `NOLOCK` 查询提示的查询：`SELECT * FROM users WITH (NOLOCK) WHERE age > 18`。
-    - 正常的联接查询：`SELECT users.name, orders.product FROM users JOIN orders ON users.id = orders.user_id`。
+    - 全表扫描的查询：
+      SELECT * FROM users WHERE age > 18;
+    - 使用了 `NOLOCK` 查询提示的查询：
+      SELECT * FROM users WITH (NOLOCK) WHERE age > 18;
+    - 正常的联接查询：
+      SELECT users.name, orders.product FROM users JOIN orders ON users.id = orders.user_id;
 
 
 `indexes_audit.py` 文件中定义了多个规则来审查索引的使用和配置。以下是该文件中提到的一些规则及其对应的测试样例建议：
