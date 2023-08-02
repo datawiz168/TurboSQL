@@ -26,8 +26,9 @@ sql-server-sql-rule
 
     主函数: audit_table_structure
     功能: 审核数据库表的结构。
-
-
+   
+测试数据库和数据
+以下是创建测试数据库和插入数据的SQL脚本
 
 1. **创建 `users` 表**:
 ```sql
