@@ -27,8 +27,46 @@ sql-server-sql-rule
     主函数: audit_table_structure
     功能: 审核数据库表的结构。
    
+前期准备
+设置 SQL Server 并为模拟 SQL 调优/审核创建一个新的数据库和用户，按照以下步骤操作：
+
+1. **连接到 SQL Server**:
+   使用 SQL Server Management Studio (SSMS) 连接到 SQL Server 实例。
+
+2. **创建一个新的数据库**:
+   可以通过右键点击 "Databases" 文件夹，然后选择 "New Database" 来创建新的数据库。在出现的窗口中输入新数据库的名称（例如 `AuditDemoDB`）并点击 "OK"。
+
+3. **创建一个新的用户**:
+   为这个数据库创建一个新的用户，这样可以限制这个用户只能访问创建的这个新数据库。这里是如何创建一个新用户的步骤：
+
+   - 在 SSMS 的 Object Explorer 中，展开你的服务器节点。
+   - 展开 `Security` 文件夹。
+   - 右键点击 `Logins`，然后选择 `New Login`。
+   - 在 `Login name` 区域输入新用户的名称（例如 `AuditDemoUser`）。
+   - 选择 `SQL Server authentication`。
+   - 输入一个密码。
+   - 在 `Default Database` 下拉菜单中选择你之前创建的数据库（例如 `AuditDemoDB`）。
+   - 点击左侧的 `User Mapping`。
+   - 在右侧，勾选你之前创建的数据库（例如 `AuditDemoDB`），然后在下方为这个用户赋予适当的角色，如 `db_datareader`、`db_datawriter` 等。
+   - 点击 "OK"。
+
+现在已经创建了一个新的数据库和一个用户。可以在你的 Python 脚本中使用以下信息来连接到这个数据库：
+
+```python
+server = "YOUR_SERVER_NAME"  # 你的 SQL Server 名称，如果是本地服务器，可以使用 "localhost" 或者 "(local)"
+database = "AuditDemoDB"
+user = "AuditDemoUser"
+password = "YOUR_PASSWORD"  # 你为 AuditDemoUser 设置的密码
+```
+
+请确保替换 `YOUR_SERVER_NAME` 和 `YOUR_PASSWORD` 为适当的值。
+
+注意：为了安全起见，不建议使用 `sa` 或其他高权限账号在生产环境中运行应用程序。创建一个有限权限的用户是一个更好的选择。
+
+   
 测试数据库和数据
 以下是创建测试数据库和插入数据的SQL脚本
+
 
 1. **创建 `users` 表**:
 ```sql
