@@ -3,29 +3,31 @@
 ### 基于规则的 SQL Server SQL 审计调优工具
 
 #### 主要功能
+
 此工具提供了四个核心的审计功能，每个功能都被分离到单独的 .py 文件中，主函数则导入并调用这四个文件：
 
 1. **SQL语句审核** (`sql_query_audit.py`):
-    - 主函数: `audit_query`
-    - 功能: 审核SQL查询的安全和性能问题。
+   - 主函数: `audit_query`
+   - 功能: 审核SQL查询的安全和性能问题。
 
 2. **执行计划审核** (`execution_plan_audit.py`):
-    - 函数: `get_execution_plan`
-      - 功能: 提取SQL查询的执行计划。
-    - 函数: `audit_execution_plan`
-      - 功能: 审核提取到的执行计划。
+   - 函数: `get_execution_plan`
+     - 功能: 提取SQL查询的执行计划。
+   - 函数: `audit_execution_plan`
+     - 功能: 审核提取到的执行计划。
 
 3. **索引审核** (`indexes_audit.py`):
-    - 主函数: `audit_indexes`
-    - 功能: 审核数据库索引的使用和配置。
+   - 主函数: `audit_indexes`
+   - 功能: 审核数据库索引的使用和配置。
 
 4. **表结构审核** (`table_structure_audit.py`):
-    - 主函数: `audit_table_structure`
-    - 功能: 审核数据库表的结构。
+   - 主函数: `audit_table_structure`
+   - 功能: 审核数据库表的结构。
 
 #### 安装
 
 为了运行此工具，您需要安装以下Python包：
+
 ```
 pip install pyodbc
 ```
@@ -42,7 +44,54 @@ database = "YOUR_DB_NAME"
 user = "YOUR_USER_NAME"
 password = "YOUR_PASSWORD"
 ```
+
 确保替换适当的值。
+
+#### 建表及数据准备
+
+在开始之前，我们需要确保有适当的数据结构和数据来运行测试样例。以下是建表及数据准备的脚本：
+
+```sql
+-- 创建 users 表
+CREATE TABLE users (
+    id INT PRIMARY KEY IDENTITY(1,1),
+    name NVARCHAR(100),
+    email NVARCHAR(100) UNIQUE,
+    age INT
+);
+
+-- 创建 orders 表
+CREATE TABLE orders (
+    order_id INT PRIMARY KEY IDENTITY(1,1),
+    user_id INT FOREIGN KEY REFERENCES users(id),
+    product_id INT,
+    amount DECIMAL(10, 2)
+);
+
+-- 创建 products 表
+CREATE TABLE products (
+    product_id INT PRIMARY KEY IDENTITY(1,1),
+    product_name NVARCHAR(100)
+);
+
+-- 插入示例数据到 users 表
+INSERT INTO users (name, email, age) VALUES 
+('张三', 'zhangsan@example.com', 28),
+('李四', 'lisi@example.com', 26),
+('王五', 'wangwu@example.com', 24);
+
+-- 插入示例数据到 products 表
+INSERT INTO products (product_name) VALUES 
+('苹果'),
+('香蕉'),
+('橙子');
+
+-- 插入示例数据到 orders 表
+INSERT INTO orders (user_id, product_id, amount) VALUES 
+(1, 1, 10.5),
+(1, 2, 5.5),
+(2, 3, 7.0);
+```
 
 #### 示例测试样例
 
@@ -50,32 +99,26 @@ password = "YOUR_PASSWORD"
 
 1. **检查未优化的联接**:
    执行一个查询，其中涉及到大量的表联接但没有使用索引。
+   
    ```sql
    SELECT * FROM users 
    JOIN orders ON users.id = orders.user_id 
-   JOIN products ON orders.product_id = products.id 
+   JOIN products ON orders.product_id = products.product_id 
    WHERE users.age > 25;
    ```
 
-2. **未使用的索引**:
-   创建一个索引，但在查询中并没有使用到，工具应该能识别出这个索引没有被使用。
-   ```sql
-   CREATE INDEX idx_unused_email ON users(email);
-   SELECT * FROM users WHERE name LIKE '%zhang%';
-   ```
-
-3. **全表扫描**:
+2. **全表扫描**:
    执行一个查询，这个查询会扫描整个表，而不是使用索引。
+   
    ```sql
    SELECT * FROM users WHERE name LIKE '%zhang%';
    ```
 
-4. **复杂的子查询**:
+3. **复杂的子查询**:
    执行一个包含多个子查询和联接的查询，此查询可能需要优化。
+   
    ```sql
    SELECT u.name, (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count 
    FROM users u 
    WHERE EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.amount > 100);
    ```
-
-这些测试样例可以帮助您理解此工具如何辨识和提出SQL查询中的性能问题。
