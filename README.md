@@ -1,270 +1,81 @@
-sql-server-sql-rule
+## sql-server-sql-rule
 
-基于规则的 SQL Server SQL 审计调优工具。
-主要功能
+### 基于规则的 SQL Server SQL 审计调优工具
 
-此工具提供了四个核心的审计功能，每个功能都被分离到单独的 .py 文件中。主函数则导入并调用这四个文件：
-1. SQL语句审核 (sql_query_audit.py):
+#### 主要功能
+此工具提供了四个核心的审计功能，每个功能都被分离到单独的 .py 文件中，主函数则导入并调用这四个文件：
 
-    主函数: audit_query
-    功能: 审核SQL查询的安全和性能问题。
-    相关辅助函数: 用于支持主要审计功能。
+1. **SQL语句审核** (`sql_query_audit.py`):
+    - 主函数: `audit_query`
+    - 功能: 审核SQL查询的安全和性能问题。
 
-2. 执行计划审核 (execution_plan_audit.py):
+2. **执行计划审核** (`execution_plan_audit.py`):
+    - 函数: `get_execution_plan`
+      - 功能: 提取SQL查询的执行计划。
+    - 函数: `audit_execution_plan`
+      - 功能: 审核提取到的执行计划。
 
-    函数: get_execution_plan
-        功能: 提取SQL查询的执行计划。
-    函数: audit_execution_plan
-        功能: 审核提取到的执行计划。
+3. **索引审核** (`indexes_audit.py`):
+    - 主函数: `audit_indexes`
+    - 功能: 审核数据库索引的使用和配置。
 
-3. 索引审核 (indexes_audit.py):
+4. **表结构审核** (`table_structure_audit.py`):
+    - 主函数: `audit_table_structure`
+    - 功能: 审核数据库表的结构。
 
-    主函数: audit_indexes
-    功能: 审核数据库索引的使用和配置。
+#### 安装
 
-4. 表结构审核 (table_structure_audit.py):
+为了运行此工具，您需要安装以下Python包：
+```
+pip install pyodbc
+```
 
-    主函数: audit_table_structure
-    功能: 审核数据库表的结构。
-   
-前期准备
-设置 SQL Server 并为模拟 SQL 调优/审核创建一个新的数据库和用户，按照以下步骤操作：
+#### 使用方法
 
-1. **连接到 SQL Server**:
-   使用 SQL Server Management Studio (SSMS) 连接到 SQL Server 实例。
-
-2. **创建一个新的数据库**:
-   可以通过右键点击 "Databases" 文件夹，然后选择 "New Database" 来创建新的数据库。在出现的窗口中输入新数据库的名称（例如 `AuditDemoDB`）并点击 "OK"。
-
-3. **创建一个新的用户**:
-   为这个数据库创建一个新的用户，这样可以限制这个用户只能访问创建的这个新数据库。这里是如何创建一个新用户的步骤：
-
-   - 在 SSMS 的 Object Explorer 中，展开你的服务器节点。
-   - 展开 `Security` 文件夹。
-   - 右键点击 `Logins`，然后选择 `New Login`。
-   - 在 `Login name` 区域输入新用户的名称（例如 `AuditDemoUser`）。
-   - 选择 `SQL Server authentication`。
-   - 输入一个密码。
-   - 在 `Default Database` 下拉菜单中选择你之前创建的数据库（例如 `AuditDemoDB`）。
-   - 点击左侧的 `User Mapping`。
-   - 在右侧，勾选你之前创建的数据库（例如 `AuditDemoDB`），然后在下方为这个用户赋予适当的角色，如 `db_datareader`、`db_datawriter` 等。
-   - 点击 "OK"。
-
-现在已经创建了一个新的数据库和一个用户。可以在你的 Python 脚本中使用以下信息来连接到这个数据库：
+1. 设置并连接到 SQL Server。
+2. 创建新的数据库以及用户。
+3. 在Python脚本中使用以下信息来连接到这个数据库：
 
 ```python
-server = "YOUR_SERVER_NAME"  # 你的 SQL Server 名称，如果是本地服务器，可以使用 "localhost" 或者 "(local)"
-database = "AuditDemoDB"
-user = "AuditDemoUser"
-password = "YOUR_PASSWORD"  # 你为 AuditDemoUser 设置的密码
+server = "YOUR_SERVER_NAME"
+database = "YOUR_DB_NAME"
+user = "YOUR_USER_NAME"
+password = "YOUR_PASSWORD"
 ```
+确保替换适当的值。
 
-请确保替换 `YOUR_SERVER_NAME` 和 `YOUR_PASSWORD` 为适当的值。
+#### 示例测试样例
 
-注意：为了安全起见，不建议使用 `sa` 或其他高权限账号在生产环境中运行应用程序。创建一个有限权限的用户是一个更好的选择。
+为了展示此工具的强大性能调优能力，提供了以下的测试样例：
 
-   
-测试数据库和数据
-以下是创建测试数据库和插入数据的SQL脚本
+1. **检查未优化的联接**:
+   执行一个查询，其中涉及到大量的表联接但没有使用索引。
+   ```sql
+   SELECT * FROM users 
+   JOIN orders ON users.id = orders.user_id 
+   JOIN products ON orders.product_id = products.id 
+   WHERE users.age > 25;
+   ```
 
+2. **未使用的索引**:
+   创建一个索引，但在查询中并没有使用到，工具应该能识别出这个索引没有被使用。
+   ```sql
+   CREATE INDEX idx_unused_email ON users(email);
+   SELECT * FROM users WHERE name LIKE '%zhang%';
+   ```
 
-1. **创建 `users` 表**:
-```sql
-CREATE TABLE users (
-    id INT PRIMARY KEY IDENTITY(1,1),
-    name NVARCHAR(100),
-    email NVARCHAR(100) UNIQUE,
-    age INT
-);
-```
+3. **全表扫描**:
+   执行一个查询，这个查询会扫描整个表，而不是使用索引。
+   ```sql
+   SELECT * FROM users WHERE name LIKE '%zhang%';
+   ```
 
-2. **创建 `orders` 表**:
-```sql
-CREATE TABLE orders (
-    order_id INT PRIMARY KEY IDENTITY(1,1),
-    user_id INT FOREIGN KEY REFERENCES users(id),
-    product NVARCHAR(100),
-    amount DECIMAL(10, 2)
-);
-```
+4. **复杂的子查询**:
+   执行一个包含多个子查询和联接的查询，此查询可能需要优化。
+   ```sql
+   SELECT u.name, (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count 
+   FROM users u 
+   WHERE EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.amount > 100);
+   ```
 
-3. **插入示例数据到 `users` 表**:
-```sql
-INSERT INTO users (name, email, age) VALUES 
-('张三', 'zhangsan@example.com', 25),
-('李四', 'lisi@example.com', 30),
-('王五', 'wangwu@example.com', 20);
-```
-
-4. **插入示例数据到 `orders` 表**:
-```sql
-INSERT INTO orders (user_id, product, amount) VALUES 
-(1, '苹果', 10.5),
-(1, '香蕉', 5.5),
-(2, '橙子', 7.0);
-```
-
-5. **提供的 SQL 查询**:
-    - 全表扫描的查询：
-      SELECT * FROM users WHERE age > 18;
-    - 使用了 `NOLOCK` 查询提示的查询：
-      SELECT * FROM users WITH (NOLOCK) WHERE age > 18;
-    - 正常的联接查询：
-      SELECT users.name, orders.product FROM users JOIN orders ON users.id = orders.user_id;
-
-
-`indexes_audit.py` 文件中定义了多个规则来审查索引的使用和配置。以下是该文件中提到的一些规则及其对应的测试样例建议：
-
-1. **未使用的索引**: 检查系统中未使用的索引。
-   - 测试样例: 创建一个未使用的非聚集索引，并检查它是否被识别为未使用。
-   
-     ```sql
-     CREATE INDEX idx_unused ON users(email);
-     ```
-
-2. **表没有主键**: 查找没有主键的表。
-   - 测试样例: 创建一个没有主键的新表，并检查它是否被识别为没有主键。
-   
-     ```sql
-     CREATE TABLE test_no_pk (col1 INT, col2 NVARCHAR(100));
-     ```
-
-3. **表没有聚集索引**: 查找没有聚集索引的表。
-   - 测试样例: 创建一个表并添加一个非聚集索引，然后检查该表是否被识别为没有聚集索引。
-
-     ```sql
-     CREATE TABLE test_no_clustindex (col1 INT, col2 NVARCHAR(100));
-     CREATE NONCLUSTERED INDEX idx_test_no_clustindex ON test_no_clustindex(col1);
-     ```
-
-4. **索引的大小超过5MB**: 查找大小超过5MB的索引。
-   - 测试样例: 虽然实际创建一个超过5MB的索引可能比较困难，但您可以将此规则作为理论验证。
-
-5. **索引的填充因子**: 检查索引的填充因子是否在70%到90%之间。
-   - 测试样例: 创建一个索引，其填充因子不在此范围内，并检查它是否被标识。
-
-     ```sql
-     CREATE INDEX idx_fillfactor ON users(age) WITH (FILLFACTOR = 60);
-     ```
-
-6. **索引的行锁定**: 检查禁止行锁定的索引。
-   - 测试样例: 创建一个索引，并在创建时指定`ALLOW_ROW_LOCKS = OFF`，然后检查它是否被标识。
-   
-     ```sql
-     CREATE INDEX idx_no_row_locks ON users(name) WITH (ALLOW_ROW_LOCKS = OFF);
-     ```
-
-7. **索引的页锁定**: 检查禁止页锁定的索引。
-   - 测试样例: 创建一个索引，并在创建时指定`ALLOW_PAGE_LOCKS = OFF`，然后检查它是否被标识。
-
-     ```sql
-     CREATE INDEX idx_no_page_locks ON users(email) WITH (ALLOW_PAGE_LOCKS = OFF);
-     ```
-
-这些测试样例提供了基于`indexes_audit.py`文件中的规则的不同情况。
-
-`execution_plan_audit.py` 文件中定义了多个规则来审查SQL查询的执行计划。以下是一些提到的规则及其对应的测试样例建议：
-
-9. **检查全表扫描**: 
-   - 测试样例: 执行一个没有使用任何索引的查询。
-   
-     ```sql
-     SELECT * FROM users WHERE name LIKE '%zhang%';
-     ```
-
-10. **检查缺失的索引**:
-   - 测试样例: 执行一个查询，系统可能会建议为其添加索引。
-   
-     ```sql
-     SELECT * FROM users WHERE email = 'missing_index@example.com';
-     ```
-
-11. **检查预估的行数与实际行数的偏差**: 
-   - 测试样例: 这通常涉及到数据库统计信息的问题。您可以考虑在表有大量数据更改后运行查询，而不更新统计信息。
-
-12. **检查数据锁**: 
-   - 测试样例: 执行一个需要长时间运行的事务，同时尝试在另一个会话中修改相同的数据。
-
-     ```sql
-     BEGIN TRANSACTION;
-     UPDATE users SET age = age + 1 WHERE id = 1;
-     -- In another session
-     UPDATE users SET age = age - 1 WHERE id = 1;
-     ```
-13. **使用不推荐的PAGLOCK查询提示**:
-   - 测试样例:
-     ```sql
-     SELECT * FROM users WITH (PAGLOCK) WHERE name = '李四';
-     ```
-
-14. **数据分布不均**: 
-   - 测试样例: 这通常涉及到分区表或分布式数据库的查询。您可以考虑在其中一部分数据量远大于其他部分的分区表上运行查询。
-
-15. **数据碎片**: 
-   - 测试样例: 在表上频繁地进行插入、删除和更新操作，然后查询该表。
-
-16. **数据冗余**: 
-   - 测试样例: 在表中插入重复的数据，然后执行查询。
-   
-     ```sql
-     INSERT INTO users (name, email, age) VALUES ('张三', 'zhangsan@example.com', 25);
-     SELECT * FROM users WHERE name = '张三';
-     ```
-
-17. **大量的UNION操作**: 
-   - 测试样例: 执行一个包含多个UNION的查询。
-   
-     ```sql
-     SELECT name FROM users WHERE id = 1
-     UNION 
-     SELECT name FROM users WHERE id = 2
-     UNION
-     SELECT name FROM users WHERE id = 3;
-     ```
-
-这些测试样例基于`execution_plan_audit.py`文件中的规则提供了不同的情境。
-
-`sql_query_audit.py` 文件中定义了多个规则来审查SQL查询的各种安全和性能问题。以下是一些提到的规则及其对应的测试样例建议：
-
-18. **使用不推荐的xp_enumerrorlogs存储过程**:
-   - 测试样例:
-     ```sql
-     EXEC xp_enumerrorlogs;
-     ```
-
-19. **使用不推荐的xp_logevent存储过程**:
-   - 测试样例:
-     ```sql
-     EXEC xp_logevent 60000, 'Test Message';
-     ```
-20. **使用不推荐的ROWLOCK查询提示**:
-   - 测试样例:
-     ```sql
-    SELECT * FROM users WITH (ROWLOCK) WHERE email = 'lisi@example.com';
-     ```
-
-21. **使用不推荐的NOLOCK查询提示**:
-   - 测试样例:
-     ```sql
-     SELECT * FROM users WITH (NOLOCK) WHERE id = 1;
-     ```
-
-22. **使用不推荐的INDEX查询提示**:
-   - 测试样例:
-     ```sql
-     SELECT * FROM users WITH (INDEX(idx_name)) WHERE name = '张三';
-     ```
-
-23. **使用不推荐的FORCESEEK查询提示**:
-   - 测试样例:
-     ```sql
-     SELECT * FROM users WITH (FORCESEEK) WHERE id = 2;
-     ```
-
-
-
-
-
-这些测试样例基于`sql_query_audit.py`文件中的规则提供了不同的情境。
-
-这些样例涵盖了各种可能的SQL查询安全和性能问题，用来测试审计调优脚本。
+这些测试样例可以帮助您理解此工具如何辨识和提出SQL查询中的性能问题。
