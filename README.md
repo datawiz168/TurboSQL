@@ -30,6 +30,8 @@
 
 ```
 pip install pyodbc
+pip install sqlparse
+
 ```
 
 #### 使用方法
