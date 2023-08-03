@@ -261,18 +261,6 @@ INSERT INTO orders (user_id, product, amount) VALUES
      SELECT * FROM users WITH (FORCESEEK) WHERE id = 2;
      ```
 
-24. **使用不推荐的FORCESCAN查询提示**:
-   - 测试样例:
-     ```sql
-     SELECT * FROM users WITH (FORCESCAN) WHERE age > 20;
-     ```
-
-25. **使用不推荐的NOEXPAND查询提示**:
-   - 测试样例:
-     ```sql
-     SELECT * FROM users_view WITH (NOEXPAND);
-     ```
-
 
 
 
