@@ -194,3 +194,4 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
        )
    ) AND age > 25;
    ```
+
