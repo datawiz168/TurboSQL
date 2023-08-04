@@ -460,16 +460,16 @@ def audit_indexes(conn):
             f"警告: 表 {result.TableName} 的索引 {result.IndexName} 包含 {result.IncludedColumnCount} 个列，可能导致存储和I/O开销增加。")
 
     # 规则 36: 检查非聚集索引的键列数
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, COUNT(*) AS KeyColumnCount "
-    #                "FROM sys.indexes i "
-    #                "JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id "
-    #                "WHERE i.type_desc = 'NONCLUSTERED' AND ic.is_included_column = 0 "
-    #                "GROUP BY OBJECT_NAME(i.object_id), i.name "
-    #                "HAVING COUNT(*) > 5")  # 假设非聚集索引的键列数超过5可能导致性能下降
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的非聚集索引 {result.IndexName} 的键列数为 {result.KeyColumnCount}，可能导致查询性能下降。")
+    cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, COUNT(*) AS KeyColumnCount "
+                   "FROM sys.indexes i "
+                   "JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id "
+                   "WHERE i.type_desc = 'NONCLUSTERED' AND ic.is_included_column = 0 "
+                   "GROUP BY OBJECT_NAME(i.object_id), i.name "
+                   "HAVING COUNT(*) > 5")  # 假设非聚集索引的键列数超过5可能导致性能下降
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的非聚集索引 {result.IndexName} 的键列数为 {result.KeyColumnCount}，可能导致查询性能下降。")
 
     # 规则 37: 检查索引的空间利用率
     cursor.execute(
