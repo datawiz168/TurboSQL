@@ -1,17 +1,23 @@
 import pyodbc
 
-def audit_table_structure(conn):
+
+
+def audit_table_structure(conn, tables):
     cursor = conn.cursor()
 
-    # Rule 1: 检查缺失的主键
-    query1 = """
-    SELECT TABLE_NAME 
-    FROM INFORMATION_SCHEMA.TABLES 
-    WHERE TABLE_TYPE = 'BASE TABLE' 
+    # Convert tables list into a format suitable for SQL IN clause
+    tables_str = ', '.join([f"'{table}'" for table in tables])
+
+    # Rule 1: Check for tables without a primary key
+    query1 = f"""
+    SELECT TABLE_NAME
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_CATALOG = 'AuditDemoDB' 
     AND TABLE_NAME NOT IN (
-        SELECT DISTINCT TABLE_NAME 
-        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
-    );
+        SELECT DISTINCT TABLE_NAME
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+        WHERE CONSTRAINT_NAME LIKE 'PK_%'
+    ) AND TABLE_NAME IN ({tables_str});
     """
     cursor.execute(query1)
     tables_without_primary_key = cursor.fetchall()
@@ -122,11 +128,14 @@ def audit_table_structure(conn):
         print(f"警告: 表 {table} 的列 {column} 使用了不必要的大数据类型。")
 
     # Rule 10: 检查没有使用SCHEMA进行组织的表
-    query10 = """
+    tables_placeholder = ', '.join(["'{}'".format(table) for table in tables])
+
+    query10 = f"""
     SELECT TABLE_NAME 
     FROM INFORMATION_SCHEMA.TABLES 
-    WHERE TABLE_SCHEMA = 'dbo';  -- 默认的SCHEMA
+    WHERE TABLE_NAME IN ({tables_placeholder}) AND TABLE_SCHEMA = 'dbo';  -- 默认的SCHEMA
     """
+
     cursor.execute(query10)
     tables_without_schema = cursor.fetchall()
     for table in tables_without_schema:
@@ -195,17 +204,22 @@ def audit_table_structure(conn):
         print(f"警告: 表 {table} 有 {rows} 行，但没有分区。")
 
     # Rule 16: 检查是否所有的表都有主键
-    query16 = """
-    SELECT name FROM sys.tables WHERE OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
+    query16 = f"""
+    SELECT name 
+    FROM sys.tables 
+    WHERE name IN ({', '.join(["'" + table + "'" for table in tables])})
+    AND OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
     """
+
     cursor.execute(query16)
     tables_without_primarykey = cursor.fetchall()
+
     for table in tables_without_primarykey:
         print(f"警告: 表 {table[0]} 没有主键。")
 
     # Rule 17: 检查是否存在过大的表但未建立任何索引
     # query17 = """
-    # SELECT t.name FROM sys.tables t WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WHERE i.object_id = t.object_id) AND t.rows > 10000
+    # SELECT t.name FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) t WHERE NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) i WHERE i.object_id = t.object_id) AND t.rows > 10000
     # """
     # cursor.execute(query17)
     # large_tables_without_indexes = cursor.fetchall()
@@ -284,9 +298,10 @@ def audit_table_structure(conn):
         print(f"警告: 表 {table} 中的列 {column} 使用了浮点数据类型，可能导致不准确的计算。")
 
     # Rule 25: 检查是否有表没有更新统计信息
-    query25 = """
-    SELECT name FROM sys.tables 
-    WHERE OBJECTPROPERTY(object_id, 'IsUserTable') = 1 AND DATEDIFF(d, STATS_DATE(object_id, NULL), GETDATE()) > 30
+    tables_placeholder = ', '.join(["'{}'".format(table) for table in tables])
+    query25 = f"""
+    SELECT name FROM sys.tables WHERE name IN ({tables_placeholder})
+    AND OBJECTPROPERTY(object_id, 'IsUserTable') = 1 AND DATEDIFF(d, STATS_DATE(object_id, NULL), GETDATE()) > 30
     """
     cursor.execute(query25)
     outdated_statistics_tables = cursor.fetchall()
@@ -295,7 +310,7 @@ def audit_table_structure(conn):
 
     # Rule 26: 检查是否有表没有主键
     query26 = """
-    SELECT name FROM sys.tables 
+    SELECT name FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
     WHERE type = 'U' AND OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
     """
     cursor.execute(query26)
@@ -306,7 +321,7 @@ def audit_table_structure(conn):
     # Rule 27: 检查是否有过大的表没有聚集索引
     query27 = """
     SELECT OBJECT_NAME(i.object_id) AS TableName
-    FROM sys.indexes i
+    FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) i
     WHERE i.type = 0 AND OBJECTPROPERTY(i.object_id, 'TableHasClustIndex') = 0
     """
     cursor.execute(query27)
@@ -431,7 +446,7 @@ def audit_table_structure(conn):
     # Rule 37: 检查是否有表缺少主键
     query37 = """
     SELECT name AS TableName 
-    FROM sys.tables 
+    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
     WHERE OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
     """
     cursor.execute(query37)
@@ -530,7 +545,7 @@ def audit_table_structure(conn):
     # Rule 45: 检查是否存在未使用的表
     query45 = """
     SELECT name AS TableName 
-    FROM sys.tables
+    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)
     WHERE OBJECTPROPERTY(object_id, 'TableHasClustIndex') = 0
     AND OBJECTPROPERTY(object_id, 'TableHasNonClustIndex') = 0
     AND OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
@@ -599,7 +614,7 @@ def audit_table_structure(conn):
     # Rule 50: 检查是否存在没有索引的表
     query50 = """
     SELECT t.name AS TableName 
-    FROM sys.tables t
+    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) t
     LEFT JOIN sys.indexes i ON t.object_id = i.object_id 
     WHERE i.object_id IS NULL
     """
@@ -663,7 +678,7 @@ def audit_table_structure(conn):
     # Rule 55: 检查是否存在冗余的索引
     query55 = """
     SELECT OBJECT_NAME(ix.object_id) AS TableName, ix.name AS IndexName
-    FROM sys.indexes ix
+    FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) ix
     INNER JOIN sys.index_columns ic1 ON ix.object_id = ic1.object_id AND ix.index_id = ic1.index_id
     INNER JOIN sys.index_columns ic2 ON ic1.object_id = ic2.object_id AND ic1.column_id = ic2.column_id
     WHERE ic1.index_id <> ic2.index_id
@@ -765,7 +780,7 @@ def audit_table_structure(conn):
     # 规则 64: 检查存在超过 5 个索引的表
     query64 = """
     SELECT OBJECT_NAME(ind.object_id) AS TableName, COUNT(*) as IndexCount
-    FROM sys.indexes ind
+    FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) ind
     GROUP BY ind.object_id
     HAVING COUNT(*) > 5
     """
@@ -968,7 +983,7 @@ def audit_table_structure(conn):
     query81 = """
     SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, 
            s.user_seeks + s.user_scans + s.user_lookups AS TotalUses
-    FROM sys.indexes i
+    FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) i
     JOIN sys.dm_db_index_usage_stats s ON i.object_id = s.object_id AND i.index_id = s.index_id
     WHERE s.user_seeks + s.user_scans + s.user_lookups < 10
     """
@@ -1060,7 +1075,7 @@ def audit_table_structure(conn):
     # 规则 89: 检查是否有表缺失主键
     query104 = """
     SELECT name AS TableName
-    FROM sys.tables 
+    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
     WHERE type = 'U' AND OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
     """
     cursor.execute(query104)
@@ -1083,7 +1098,7 @@ def audit_table_structure(conn):
     # 规则 91: 检查是否有的表缺少主键
     query91 = """
     SELECT name AS TableName
-    FROM sys.tables 
+    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
     WHERE type = 'U' 
     AND OBJECTPROPERTY(object_id,'TableHasPrimaryKey') = 0
     """
@@ -1195,7 +1210,7 @@ def audit_table_structure(conn):
     # 规则 100: 检查是否有的表没有统计信息
     query100 = """
     SELECT name AS TableName
-    FROM sys.tables t
+    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) t
     WHERE NOT EXISTS (
         SELECT 1 
         FROM sys.stats s 
@@ -1210,7 +1225,7 @@ def audit_table_structure(conn):
     # 规则 101: 检查是否有表缺失索引
     query105 = """
     SELECT name AS TableName
-    FROM sys.tables 
+    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
     WHERE type = 'U' AND OBJECTPROPERTY(object_id, 'TableWithNoClusteredIndex') = 1
     """
     cursor.execute(query105)
