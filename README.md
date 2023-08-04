@@ -97,6 +97,7 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
 (1, 2, 5.5),
 (2, 3, 7.0);
 ```
+
 -- 插入更多的用户数据
 INSERT INTO users (name, email, age) VALUES 
 ('赵六', 'zhaoliu@example.com', 27),
