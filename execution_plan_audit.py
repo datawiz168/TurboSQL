@@ -1,13 +1,29 @@
 import pyodbc
 import xml.etree.ElementTree as ET
+import sqlparse
 
 def get_execution_plan(conn, query):
+    """
+    获取SQL查询的执行计划。
+    """
     # 使用 "SET SHOWPLAN_XML ON" 命令获取XML格式的执行计划
     set_showplan_cmd = "SET SHOWPLAN_XML ON;"
     cursor = conn.cursor()
     cursor.execute(set_showplan_cmd)
-    cursor.execute(query)
-    
+
+    # 将查询的SELECT部分替换为SELECT TOP 0
+    modified_query = query.replace("SELECT", "SELECT TOP 0", 1)
+
+    try:
+        cursor.execute(modified_query)
+    except pyodbc.Error as e:
+        print(f"错误: {e}")
+        if "列名" in str(e) or "无效" in str(e) or "语法" in str(e):
+            print("提示：请检查SQL语句的语法、表结构和列名。")
+        else:
+            print("提示：可能是权限问题或其他数据库配置问题。")
+        return None
+
     # 获取执行计划
     plan = cursor.fetchone()[0]
     cursor.close()
@@ -17,10 +33,14 @@ def get_execution_plan(conn, query):
     cursor = conn.cursor()
     cursor.execute(set_showplan_off_cmd)
     cursor.close()
-    
+
     return plan
 
+
 def audit_execution_plan(plan_xml):
+    """
+    审计获取的执行计划，并返回任何潜在的性能问题。
+    """
     try:
         root = ET.fromstring(plan_xml)
     except Exception as e:
@@ -35,7 +55,6 @@ def audit_execution_plan(plan_xml):
         if not index_elements:
             print("警告: 查询包含全表扫描。考虑添加适当的索引来提高性能。")
             break
-
 
     # Rule 1: 检查全表扫描
     table_scans = root.findall(".//TableScan")
@@ -1472,11 +1491,15 @@ def audit_execution_plan(plan_xml):
     if in_memory_table_scans:
         print("警告: 查询中存在内存中的大型表扫描，考虑优化索引或查询以避免全表扫描。")
 
-    # Rule 283: 检查是否有过多的自连接
-    self_joins = [op for op in root.findall(".//RelOp[.//Join]") if
-                  op.find(".//Object").get('Database') == op.find(".//Object[2]").get('Database') and op.find(
-                      ".//Object").get('Schema') == op.find(".//Object[2]").get('Schema') and op.find(".//Object").get(
-                      'Table') == op.find(".//Object[2]").get('Table')]
+    # # Rule 283: 检查是否有过多的自连接
+    rel_ops = root.findall(".//RelOp")
+    self_joins = [
+        op for op in rel_ops if op.find('.//Join') is not None and
+                                op.find(".//Object").get('Database') == op.find(".//Object[2]").get('Database') and
+                                op.find(".//Object").get('Schema') == op.find(".//Object[2]").get('Schema') and
+                                op.find(".//Object").get('Table') == op.find(".//Object[2]").get('Table')
+    ]
+
     if self_joins:
         print("警告: 查询中存在过多的自连接，可能导致性能下降。")
 
