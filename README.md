@@ -155,12 +155,7 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
    FROM users u 
    WHERE EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.amount > 100);
    ```
-
-很抱歉，我明白您的意思了。我会确保代码块格式正确，以便您可以直接复制并粘贴到GitHub上。
-
-以下是整合后的README的代码部分：
-
----
+   
 4. **计算复杂的聚合**: 这个查询涉及到多个表的联接，并对数据进行了复杂的聚合。
 
 ```sql
