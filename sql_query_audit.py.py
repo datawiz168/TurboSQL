@@ -2,6 +2,7 @@ import pyodbc
 
 # 审核SQL查询的函数
 def audit_query(query):
+    issues = []  # 初始化issues为一个空列表
     #  规则1：检查是否使用了NOLOCK
     if "NOLOCK" in query:
         print("警告: 使用NOLOCK可能会读取到未提交的数据。确保你知道你在做什么。")
@@ -928,4 +929,6 @@ def audit_query(query):
 
     # 规则221：检查是否使用了不推荐的HOLDLOCK查询提示
     if "WITH (HOLDLOCK)" in query:
-        print("警告: 使用HOLDLOCK查询提示可能会导致保持锁。")  
+        print("警告: 使用HOLDLOCK查询提示可能会导致保持锁。")
+
+    return issues
