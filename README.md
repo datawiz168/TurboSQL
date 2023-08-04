@@ -97,6 +97,47 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
 (1, 2, 5.5),
 (2, 3, 7.0);
 ```
+-- 插入更多的用户数据
+INSERT INTO users (name, email, age) VALUES 
+('赵六', 'zhaoliu@example.com', 27),
+('田七', 'tianqi@example.com', 29),
+('王八', 'wangba@example.com', 23),
+('马九', 'majiu@example.com', 25);
+
+-- 插入更多的产品数据
+INSERT INTO products (product_name) VALUES 
+('葡萄'),
+('西瓜'),
+('桃子'),
+('樱桃');
+
+-- 为新用户插入更多订单数据
+INSERT INTO orders (user_id, product_id, amount) VALUES 
+(4, 2, 15.5),
+(4, 3, 20.5),
+(4, 4, 25.5),
+(4, 5, 30.5),
+(4, 6, 35.5),
+(4, 7, 40.5),
+(5, 1, 12.5),
+(5, 2, 17.5),
+(5, 3, 22.5),
+(5, 5, 27.5),
+(5, 6, 32.5),
+(5, 7, 37.5),
+(6, 1, 14.0),
+(6, 2, 19.0),
+(6, 3, 24.0),
+(6, 4, 29.0),
+(6, 6, 34.0),
+(6, 7, 39.0),
+(7, 1, 16.0),
+(7, 2, 21.0),
+(7, 3, 26.0),
+(7, 4, 31.0),
+(7, 5, 36.0),
+(7, 6, 41.0);
+
 
 #### 示例测试样例
 
