@@ -156,40 +156,4 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
    WHERE EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.amount > 100);
    ```
    
-4. **计算复杂的聚合**: 这个查询涉及到多个表的联接，并对数据进行了复杂的聚合。
-
-```sql
-SELECT TOP 5 u.name, AVG(o.amount) as AverageSpend
-FROM users u
-JOIN orders o ON u.id = o.user_id
-WHERE o.amount > (
-    SELECT AVG(o2.amount) 
-    FROM orders o2 
-    WHERE o2.user_id = u.id
-) AND u.id IN (
-    SELECT o3.user_id 
-    FROM orders o3 
-    GROUP BY o3.user_id 
-    HAVING COUNT(DISTINCT o3.product_id) > 5
-)
-GROUP BY u.name
-ORDER BY AverageSpend DESC;
-```
-
-5. **复杂的嵌套子查询**: 这个查询涉及到多次的嵌套子查询，并且对数据进行了多重筛选。
-
-```sql
-SELECT users.name, orders.amount
-FROM users
-WHERE users.id IN (
-    SELECT user_id 
-    FROM orders 
-    WHERE amount > (
-        SELECT AVG(amount) 
-        FROM orders
-    )
-) AND age > 25;
-```
-
----
 
