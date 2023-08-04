@@ -1,3 +1,7 @@
+了解。我将为您整合内容，并确保新的查询可以在已有的数据结构上执行。
+
+---
+
 ## sql-server-sql-rule
 
 ### 基于规则的 SQL Server SQL 审计调优工具
@@ -31,7 +35,6 @@
 ```
 pip install pyodbc
 pip install sqlparse
-
 ```
 
 #### 使用方法
@@ -99,8 +102,7 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
 
 为了展示此工具的强大性能调优能力，提供了以下的测试样例：
 
-1. **检查未优化的联接**:
-   执行一个查询，其中涉及到大量的表联接但没有使用索引。
+1. **检查未优化的联接**: 执行一个查询，其中涉及到大量的表联接但没有使用索引。
    
    ```sql
    SELECT * FROM users 
@@ -109,18 +111,48 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
    WHERE users.age > 25;
    ```
 
-2. **全表扫描**:
-   执行一个查询，这个查询会扫描整个表，而不是使用索引。
+2. **全表扫描**: 执行一个查询，这个查询会扫描整个表，而不是使用索引。
    
    ```sql
    SELECT * FROM users WHERE name LIKE '%zhang%';
    ```
 
-3. **复杂的子查询**:
-   执行一个包含多个子查询和联接的查询，此查询可能需要优化。
+3. **复杂的子查询**: 执行一个包含多个子查询和联接的查询，此查询可能需要优化。
    
    ```sql
    SELECT u.name, (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count 
    FROM users u 
    WHERE EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.amount > 100);
+   ```
+
+4. **多表自联接查询**: 考虑一个场景，我们想查找过去7天内与某用户有相同购买产品的所有其他用户。
+
+   ```sql
+   SELECT DISTINCT u2.name AS SimilarUser, p.product_name AS CommonProduct
+   FROM orders o1
+   JOIN orders o2 ON o1.product_id = o2.product_id AND o1.user_id != o2.user_id
+   JOIN users u1 ON o1.user_id = u1.id
+   JOIN users u2 ON o2.user_id = u2.id
+   JOIN products p ON o1.product_id = p.product_id
+   WHERE u1.name = '张三' AND DATEDIFF(day, o2.order_date, GETDATE()) <= 7;
+   ```
+
+5. **多重子查询**: 考虑一个场景，我们想查找购买最多产品的用户和他们的平均购买金额。
+
+   ```sql
+   SELECT TOP 5 u.name, AVG(o.amount) as AverageSpend
+   FROM users u
+   JOIN orders o ON u.id = o.user_id
+   WHERE o.amount > (
+       SELECT AVG(o2.amount) 
+       FROM orders o2 
+       WHERE o2.user_id = u.id
+   ) AND u.id IN (
+       SELECT o3.user_id 
+       FROM orders o3 
+       GROUP BY o3.user_id 
+       HAVING COUNT(DISTINCT o3.product_id) > 5
+   )
+   GROUP BY u.name
+   ORDER BY AverageSpend DESC;
    ```
