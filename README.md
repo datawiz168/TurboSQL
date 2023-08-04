@@ -1,7 +1,3 @@
-了解。我将为您整合内容，并确保新的查询可以在已有的数据结构上执行。
-
----
-
 ## sql-server-sql-rule
 
 ### 基于规则的 SQL Server SQL 审计调优工具
@@ -32,7 +28,7 @@
 
 为了运行此工具，您需要安装以下Python包：
 
-```
+```bash
 pip install pyodbc
 pip install sqlparse
 ```
@@ -83,37 +79,27 @@ CREATE TABLE products (
 INSERT INTO users (name, email, age) VALUES 
 ('张三', 'zhangsan@example.com', 28),
 ('李四', 'lisi@example.com', 26),
-('王五', 'wangwu@example.com', 24);
-
--- 插入示例数据到 products 表
-INSERT INTO products (product_name) VALUES 
-('苹果'),
-('香蕉'),
-('橙子');
-
--- 插入示例数据到 orders 表
-INSERT INTO orders (user_id, product_id, amount) VALUES 
-(1, 1, 10.5),
-(1, 2, 5.5),
-(2, 3, 7.0);
-```
-
--- 插入更多的用户数据
-INSERT INTO users (name, email, age) VALUES 
+('王五', 'wangwu@example.com', 24),
 ('赵六', 'zhaoliu@example.com', 27),
 ('田七', 'tianqi@example.com', 29),
 ('王八', 'wangba@example.com', 23),
 ('马九', 'majiu@example.com', 25);
 
--- 插入更多的产品数据
+-- 插入示例数据到 products 表
 INSERT INTO products (product_name) VALUES 
+('苹果'),
+('香蕉'),
+('橙子'),
 ('葡萄'),
 ('西瓜'),
 ('桃子'),
 ('樱桃');
 
--- 为新用户插入更多订单数据
+-- 插入示例数据到 orders 表
 INSERT INTO orders (user_id, product_id, amount) VALUES 
+(1, 1, 10.5),
+(1, 2, 5.5),
+(2, 3, 7.0),
 (4, 2, 15.5),
 (4, 3, 20.5),
 (4, 4, 25.5),
@@ -138,13 +124,14 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
 (7, 4, 31.0),
 (7, 5, 36.0),
 (7, 6, 41.0);
-
+```
 
 #### 示例测试样例
 
 为了展示此工具的强大性能调优能力，提供了以下的测试样例：
 
-1. **检查未优化的联接**: 执行一个查询，其中涉及到大量的表联接但没有使用索引。
+1. **检查未优化的联接**:
+   执行一个查询，其中涉及到大量的表联接但没有使用索引。
    
    ```sql
    SELECT * FROM users 
@@ -153,13 +140,15 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
    WHERE users.age > 25;
    ```
 
-2. **全表扫描**: 执行一个查询，这个查询会扫描整个表，而不是使用索引。
+2. **全表扫描**:
+   执行一个查询，这个查询会扫描整个表，而不是使用索引。
    
    ```sql
    SELECT * FROM users WHERE name LIKE '%zhang%';
    ```
 
-3. **复杂的子查询**: 执行一个包含多个子查询和联接的查询，此查询可能需要优化。
+3. **复杂的子查询**:
+   执行一个包含多个子查询和联接的查询，此查询可能需要优化。
    
    ```sql
    SELECT u.name, (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count 
@@ -167,20 +156,9 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
    WHERE EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.amount > 100);
    ```
 
-4. **多表自联接查询**: 考虑一个场景，我们想查找过去7天内与某用户有相同购买产品的所有其他用户。
-
-   ```sql
-   SELECT DISTINCT u2.name AS SimilarUser, p.product_name AS CommonProduct
-   FROM orders o1
-   JOIN orders o2 ON o1.product_id = o2.product_id AND o1.user_id != o2.user_id
-   JOIN users u1 ON o1.user_id = u1.id
-   JOIN users u2 ON o2.user_id = u2.id
-   JOIN products p ON o1.product_id = p.product_id
-   WHERE u1.name = '张三' AND DATEDIFF(day, o2.order_date, GETDATE()) <= 7;
-   ```
-
-5. **多重子查询**: 考虑一个场景，我们想查找购买最多产品的用户和他们的平均购买金额。
-
+4. **计算复杂的聚合**:
+   这个查询涉及到多个表的联接，并对数据进行了复杂的聚合。
+   
    ```sql
    SELECT TOP 5 u.name, AVG(o.amount) as AverageSpend
    FROM users u
@@ -192,9 +170,27 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
    ) AND u.id IN (
        SELECT o3.user_id 
        FROM orders o3 
-       GROUP BY o3.user_id 
+      
+
+ GROUP BY o3.user_id 
        HAVING COUNT(DISTINCT o3.product_id) > 5
    )
    GROUP BY u.name
    ORDER BY AverageSpend DESC;
+   ```
+
+5. **复杂的嵌套子查询**:
+   这个查询涉及到多次的嵌套子查询，并且对数据进行了多重筛选。
+   
+   ```sql
+   SELECT users.name, orders.amount
+   FROM users
+   WHERE users.id IN (
+       SELECT user_id 
+       FROM orders 
+       WHERE amount > (
+           SELECT AVG(amount) 
+           FROM orders
+       )
+   ) AND age > 25;
    ```
