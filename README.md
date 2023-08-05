@@ -31,6 +31,7 @@
 ```bash
 pip install pyodbc
 pip install sqlparse
+pip install sql_metadata
 ```
 
 #### 使用方法
