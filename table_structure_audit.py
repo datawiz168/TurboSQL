@@ -306,26 +306,19 @@ def audit_table_structure(conn, tables_in_query):
     for table, index, size in large_nonclustered_indexes:
         print(f"警告: 表 {table} 的非聚集索引 {index} 大小为 {size}KB，可能导致I/O开销增加。")
 
-    # Rule 23: 检查是否有冗余索引
+    # 规则 23: 检查是否有冗余索引
     query23 = """
-    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName
+    SELECT OBJECT_NAME(s.object_id) AS TableName, i.name AS IndexName
     FROM sys.dm_db_index_usage_stats s
     JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id
-    WHERE user_reads = 0 AND user_seeks = 0 AND system_reads = 0 AND system_seeks = 0
+    WHERE database_id = DB_ID() AND user_seeks = 0 AND user_scans = 0 AND user_lookups = 0
     """
+
     cursor.execute(query23)
     redundant_indexes = cursor.fetchall()
+
     for table, index in redundant_indexes:
         print(f"警告: 表 {table} 的索引 {index} 可能是冗余的，因为它没有被查询使用过。")
-
-    # # Rule 24: 检查是否有浮点数据类型，可能导致不准确的计算
-    # query24 = """
-    # SELECT table_name, column_name FROM information_schema.columns WHERE data_type IN ('float', 'real')
-    # """
-    # cursor.execute(query24)
-    # floating_point_columns = cursor.fetchall()
-    # for table, column in floating_point_columns:
-    #     print(f"警告: 表 {table} 中的列 {column} 使用了浮点数据类型，可能导致不准确的计算。")
 
     # 规则 24: 检查是否有浮点数据类型，可能导致不准确的计算
     query24 = """
@@ -377,24 +370,11 @@ def audit_table_structure(conn, tables_in_query):
     for table in tables_without_primary_key:
         print(f"警告: 表 {table[0]} 没有主键，可能导致数据完整性问题和查询性能下降。")
 
-
-
-    # # Rule 27: 检查是否有过大的表没有聚集索引
-    query27 = """
-    SELECT OBJECT_NAME(i.object_id) AS TableName
-    FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) i
-    WHERE i.type = 0 AND OBJECTPROPERTY(i.object_id, 'TableHasClustIndex') = 0
-    """
-    cursor.execute(query27)
-    large_tables_without_clustered_index = cursor.fetchall()
-    for table in large_tables_without_clustered_index:
-        print(f"警告: 表 {table[0]} 没有聚集索引，可能导致查询性能下降和数据存储不连续。")
-
     # 规则 27: 检查是否有过大的表没有聚集索引
     query27 = """
     SELECT OBJECT_NAME(i.object_id) AS TableName
     FROM sys.indexes i
-    WHERE i.type = 0 AND OBJECTPROPERTY(i.object_id, 'TableHasClustIndex') = 0
+    WHERE i.type = 0
     AND OBJECT_NAME(i.object_id) IN ({})
     """
     placeholders = ', '.join('?' for _ in tables_in_query)
@@ -414,17 +394,17 @@ def audit_table_structure(conn, tables_in_query):
     for table, column in columns_with_text_datatype:
         print(f"警告: 表 {table} 中的列 {column} 使用了已过时的文本数据类型，考虑使用varchar(max)、nvarchar(max)或varbinary(max)替代。")
 
-    # Rule 29: 检查是否有表使用了“*”进行查询
-    query29 = """
-    SELECT DISTINCT OBJECT_NAME(object_id) AS TableName
-    FROM sys.dm_exec_query_stats qs
-    CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
-    WHERE st.text LIKE '%SELECT * FROM%'
-    """
-    cursor.execute(query29)
-    tables_using_select_star = cursor.fetchall()
-    for table in tables_using_select_star:
-        print(f"警告: 表 {table[0]} 使用了“SELECT *”进行查询，这可能导致查询性能下降和未必要的数据传输。")
+    # Rule 29: 检查是否有表使用了“*”进行查询 #考虑删除
+    # query29 = """
+    # SELECT DISTINCT st.text AS QueryText
+    # FROM sys.dm_exec_query_stats qs
+    # CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
+    # WHERE st.text LIKE '%SELECT * FROM%'
+    # """
+    # cursor.execute(query29)
+    # queries_using_select_star = cursor.fetchall()
+    # for query in queries_using_select_star:
+    #     print(f"警告: 找到了使用 'SELECT *' 的查询: {query[0]}")
 
     # Rule 30: 检查是否有冗余的外键约束
     query30 = """
@@ -446,6 +426,7 @@ def audit_table_structure(conn, tables_in_query):
     redundant_foreign_keys = cursor.fetchall()
     for fk, table in redundant_foreign_keys:
         print(f"警告: 表 {table} 的外键约束 {fk} 可能是冗余的。")
+
 
     # Rule 31: 检查是否存在不带默认值的非空列
     query31 = """
@@ -493,10 +474,10 @@ def audit_table_structure(conn, tables_in_query):
 
     # Rule 35: 检查是否有大量数据的表没有备份
     query35 = """
-    SELECT name AS TableName, SUM(rows) AS TotalRows
+    SELECT OBJECT_NAME(object_id) AS TableName, SUM(rows) AS TotalRows
     FROM sys.partitions
     WHERE index_id IN (0, 1) AND OBJECTPROPERTY(object_id, 'IsUserTable') = 1
-    GROUP BY name
+    GROUP BY OBJECT_NAME(object_id)
     HAVING SUM(rows) > 1000000
     """
     cursor.execute(query35)
@@ -528,8 +509,10 @@ def audit_table_structure(conn, tables_in_query):
     # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
     placeholders = ', '.join('?' for _ in tables_in_query)
     query37 = query37.format(placeholders)
+
     cursor.execute(query37, tables_in_query)
     tables_without_primary_keys = cursor.fetchall()
+
     for table in tables_without_primary_keys:
         print(f"警告: 表 {table[0]} 缺少主键，可能导致数据完整性问题。")
 
