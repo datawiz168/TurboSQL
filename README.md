@@ -156,5 +156,5 @@ INSERT INTO orders (user_id, product_id, amount) VALUES
    FROM users u 
    WHERE EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.amount > 100);
    ```
-   
-
+   更新记录
+2023/8/5 ①表结构审核删除重复规则。②修复表结构审核中元素数量和占位符不匹配规则③表结构审核补充部分规则④调通部分表结构审核部分规则。⑥只审核sql中出现的表。⑦sql_metadata库的引入。
