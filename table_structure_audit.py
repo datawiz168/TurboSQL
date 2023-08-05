@@ -1,6 +1,5 @@
 import pyodbc
 
-
 def audit_table_structure(conn, tables_in_query):
     cursor = conn.cursor()
 
@@ -874,18 +873,21 @@ def audit_table_structure(conn, tables_in_query):
         print(f"警告: 表 {table} 的统计信息在 {last_updated} 之后未更新，建议更新统计信息。")
 
     # 规则 66: 检查表的大小
-    query66 = """
-    SELECT t.name AS TableName, SUM(p.rows) AS RowCount
-    FROM sys.tables t
-    JOIN sys.partitions p ON t.object_id = p.object_id
-    WHERE p.index_id IN (0, 1)
-    GROUP BY t.name
-    HAVING SUM(p.rows) > 5000000  # 考虑超过500万行可能过大
-    """
+    query66 = '''
+    SELECT TableName, TotalRows
+    FROM (
+        SELECT t.name TableName, SUM(p.rows) TotalRows
+        FROM sys.tables t
+        JOIN sys.partitions p ON t.object_id = p.object_id
+        WHERE p.index_id IN (0, 1)
+        GROUP BY t.name
+    ) AS SubQuery
+    WHERE SubQuery.TotalRows > 5000000
+    '''
     cursor.execute(query66)
     large_tables = cursor.fetchall()
     for table in large_tables:
-        print(f"警告: 表 {table.TableName} 的行数为 {table.RowCount}，可能过大。")
+        print(f"警告: 表 {table.TableName} 的行数为 {table.TotalRows}，可能过大。")
 
     # 规则 67: 检查使用 TEXT 数据类型的列
     query67 = """
@@ -1031,13 +1033,13 @@ def audit_table_structure(conn, tables_in_query):
         print(f"警告: 表 {table} 是空的，考虑是否需要这个表。")
 
     # 规则 79: 检查是否有宽表（列数过多的表）
-    query102 = """
+    query79 = """
     SELECT table_name AS TableName, COUNT(*) AS ColumnCount
     FROM information_schema.columns
     GROUP BY table_name
     HAVING COUNT(*) > 50
     """
-    cursor.execute(query102)
+    cursor.execute(query79)
     wide_tables = cursor.fetchall()
     for table in wide_tables:
         print(f"警告: 表 {table.TableName} 的列数为 {table.ColumnCount}，可能是一个宽表。")
@@ -1157,13 +1159,13 @@ def audit_table_structure(conn, tables_in_query):
         print(f"警告: 索引名 {index.IndexName} 在多个表中使用，可能会导致混淆。")
 
     # 规则 89: 检查宽表
-    query89 = """
+    query89 = '''
     SELECT t.name AS TableName, COUNT(c.name) AS ColumnCount 
     FROM sys.tables t
     JOIN sys.columns c ON t.object_id = c.object_id
     GROUP BY t.name
-    HAVING COUNT(c.name) > 20  # 考虑超过20列可能过宽
-    """
+    HAVING COUNT(c.name) > 20  -- 考虑超过20列可能过宽
+    '''
     cursor.execute(query89)
     wide_tables = cursor.fetchall()
     for table in wide_tables:
@@ -1183,7 +1185,7 @@ def audit_table_structure(conn, tables_in_query):
 
     # 规则 91: 检查是否存在大型表但无索引
     query91 = """
-    SELECT t.name AS TableName, SUM(p.rows) AS RowCount
+    SELECT t.name AS TableName, SUM(p.rows) AS TotalRows
     FROM sys.tables t
     JOIN sys.partitions p ON t.object_id = p.object_id
     WHERE p.index_id IN (0, 1)  -- 只考虑堆或聚集索引
@@ -1331,22 +1333,30 @@ def audit_table_structure(conn, tables_in_query):
     for table in tables_without_clustered_index:
         print(f"警告: 表 {table.TableName} 没有聚集索引。")
 
-    # 规则 102: 检查是否存在过多的 NULL 值的列
-    query102 = """
-    SELECT t.name AS TableName, c.name AS ColumnName, p.rows AS RowCount, 
-           (SELECT COUNT(*) FROM (SELECT c.name FROM sys.tables t WHERE t.name = ? AND c.name IS NULL) AS subquery) AS NullCount
-    FROM sys.tables t
-    JOIN sys.columns c ON t.object_id = c.object_id
-    JOIN sys.partitions p ON t.object_id = p.object_id
-    WHERE p.index_id IN (0, 1)  -- 只考虑堆或聚集索引
-    AND (SELECT COUNT(*) FROM (SELECT c.name FROM sys.tables t WHERE t.name = ? AND c.name IS NULL) AS subquery) / CAST(p.rows AS FLOAT) > 0.5  -- NULL 值超过50%
-    """
-    for table in tables_in_query:
-        cursor.execute(query102, table, table)
-        columns_with_many_nulls = cursor.fetchall()
-        for column in columns_with_many_nulls:
-            print(
-                f"警告: 表 {column.TableName} 的列 {column.ColumnName} 存在大量的 NULL 值，NULL 值的比例为 {column.NullCount / column.RowCount}。")
+    # 规则102: 检查表中 NULL 值超过50%的列
+    query102 = '''
+        SELECT 
+            t.[name] AS TableName, 
+            c.[name] AS ColumnName, 
+            p.[rows] AS TotalRows,
+            SUM(CASE WHEN c.is_nullable = 1 THEN 1 ELSE 0 END) AS NullCount
+        FROM [sys].[tables] t
+        JOIN [sys].[columns] c ON t.[object_id] = c.[object_id]
+        JOIN [sys].[partitions] p ON t.[object_id] = p.[object_id]
+        WHERE p.[index_id] IN (0, 1)  -- 只考虑堆或聚集索引
+        GROUP BY t.[name], c.[name], p.[rows]
+        HAVING SUM(CASE WHEN c.is_nullable = 1 THEN 1 ELSE 0 END) / CAST(p.[rows] AS FLOAT) > 0.5  -- NULL 值超过50%
+    '''
 
+    # 执行查询
+    cursor.execute(query102)
+    columns_with_many_nulls = cursor.fetchall()
 
+    # 处理结果并打印警告
+    for column in columns_with_many_nulls:
+        print(
+            f"警告: 表 {column.TableName} 的列 {column.ColumnName} 存在大量的 NULL 值，NULL 值的比例为 {column.NullCount / column.TotalRows}。")
+
+    # 关闭游标
     cursor.close()
+
