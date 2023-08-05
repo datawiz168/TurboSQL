@@ -1,14 +1,16 @@
 import pyodbc
 
 
-
-def audit_table_structure(conn, tables):
+def audit_table_structure(conn, tables_in_query):
     cursor = conn.cursor()
 
-    # Convert tables list into a format suitable for SQL IN clause
+    # 这将保证在函数的其余部分，我们可以像以前一样使用 `tables` 变量，而无需更改任何代码
+    tables = tables_in_query
+
+    # 现在，我们可以继续像以前一样使用 `tables` 变量
     tables_str = ', '.join([f"'{table}'" for table in tables])
 
-    # Rule 1: Check for tables without a primary key
+    # 规则 1: 检查没有主键的表
     query1 = f"""
     SELECT TABLE_NAME
     FROM INFORMATION_SCHEMA.TABLES
@@ -217,14 +219,32 @@ def audit_table_structure(conn, tables):
     for table in tables_without_primarykey:
         print(f"警告: 表 {table[0]} 没有主键。")
 
-    # Rule 17: 检查是否存在过大的表但未建立任何索引
-    # query17 = """
-    # SELECT t.name FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) t WHERE NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) i WHERE i.object_id = t.object_id) AND t.rows > 10000
-    # """
-    # cursor.execute(query17)
-    # large_tables_without_indexes = cursor.fetchall()
-    # for table in large_tables_without_indexes:
-    #     print(f"警告: 表 {table[0]} 有超过10,000行但没有索引。")
+
+    # 规则 17: 检查是否存在过大的表但未建立任何索引
+    query17 = """
+    SELECT t.name 
+    FROM sys.tables t 
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM sys.indexes i 
+        WHERE i.object_id = t.object_id
+    ) AND (
+        SELECT SUM(p.rows) 
+        FROM sys.partitions p
+        WHERE p.object_id = t.object_id AND p.index_id IN (0, 1)
+    ) > 10000
+    AND t.name IN ({})
+    """
+
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query17 = query17.format(placeholders)
+
+    cursor.execute(query17, tables_in_query)
+    large_tables_without_indexes = cursor.fetchall()
+
+    for table in large_tables_without_indexes:
+        print(f"警告: 表 {table[0]} 有超过100,000行但没有索引。")
 
     # Rule 18: 检查数据类型是否适当
     query18 = """
@@ -244,14 +264,24 @@ def audit_table_structure(conn, tables):
     for table, column in columns_with_nulls:
         print(f"警告: 表 {table} 中的列 {column} 允许NULL值。")
 
-    # Rule 20: 检查表是否存在太多的外键关联
-    # query20 = """
-    # SELECT table_name, COUNT(*) as fk_count FROM information_schema.referential_constraints GROUP BY table_name HAVING COUNT(*) > 5
-    # """
-    # cursor.execute(query20)
-    # tables_with_many_foreign_keys = cursor.fetchall()
-    # for table, fk_count in tables_with_many_foreign_keys:
-    #     print(f"警告: 表 {table} 有超过5个外键关联。")
+    # 规则 20: 检查表是否存在太多的外键关联
+    query20 = """
+    SELECT OBJECT_NAME(parent_object_id) AS TableName, COUNT(*) AS FKCount
+    FROM sys.foreign_keys
+    WHERE OBJECT_NAME(parent_object_id) IN ({})
+    GROUP BY parent_object_id
+    HAVING COUNT(*) > 5
+    """
+
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query20 = query20.format(placeholders)
+
+    cursor.execute(query20, tables_in_query)
+    tables_with_many_foreign_keys = cursor.fetchall()
+
+    for table, fk_count in tables_with_many_foreign_keys:
+        print(f"警告: 表 {table} 有超过5个外键关联。")
 
     # Rule 21: 检查是否存在大量的列是 VARCHAR(MAX) 或 NVARCHAR(MAX)
     query21 = """
@@ -277,23 +307,41 @@ def audit_table_structure(conn, tables):
         print(f"警告: 表 {table} 的非聚集索引 {index} 大小为 {size}KB，可能导致I/O开销增加。")
 
     # Rule 23: 检查是否有冗余索引
-    # query23 = """
-    # SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName
-    # FROM sys.dm_db_index_usage_stats s
-    # JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id
-    # WHERE user_reads = 0 AND user_seeks = 0 AND system_reads = 0 AND system_seeks = 0
-    # """
-    # cursor.execute(query23)
-    # redundant_indexes = cursor.fetchall()
-    # for table, index in redundant_indexes:
-    #     print(f"警告: 表 {table} 的索引 {index} 可能是冗余的，因为它没有被查询使用过。")
-
-    # Rule 24: 检查是否有浮点数据类型，可能导致不准确的计算
-    query24 = """
-    SELECT table_name, column_name FROM information_schema.columns WHERE data_type IN ('float', 'real')
+    query23 = """
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName
+    FROM sys.dm_db_index_usage_stats s
+    JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id
+    WHERE user_reads = 0 AND user_seeks = 0 AND system_reads = 0 AND system_seeks = 0
     """
-    cursor.execute(query24)
+    cursor.execute(query23)
+    redundant_indexes = cursor.fetchall()
+    for table, index in redundant_indexes:
+        print(f"警告: 表 {table} 的索引 {index} 可能是冗余的，因为它没有被查询使用过。")
+
+    # # Rule 24: 检查是否有浮点数据类型，可能导致不准确的计算
+    # query24 = """
+    # SELECT table_name, column_name FROM information_schema.columns WHERE data_type IN ('float', 'real')
+    # """
+    # cursor.execute(query24)
+    # floating_point_columns = cursor.fetchall()
+    # for table, column in floating_point_columns:
+    #     print(f"警告: 表 {table} 中的列 {column} 使用了浮点数据类型，可能导致不准确的计算。")
+
+    # 规则 24: 检查是否有浮点数据类型，可能导致不准确的计算
+    query24 = """
+    SELECT OBJECT_NAME(c.object_id) AS TableName, c.name AS ColumnName
+    FROM sys.columns c
+    JOIN sys.types t ON c.user_type_id = t.user_type_id
+    WHERE t.name IN ('float', 'real') AND OBJECT_NAME(c.object_id) IN ({})
+    """
+
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query24 = query24.format(placeholders)
+
+    cursor.execute(query24, tables_in_query)
     floating_point_columns = cursor.fetchall()
+
     for table, column in floating_point_columns:
         print(f"警告: 表 {table} 中的列 {column} 使用了浮点数据类型，可能导致不准确的计算。")
 
@@ -308,23 +356,50 @@ def audit_table_structure(conn, tables):
     for table in outdated_statistics_tables:
         print(f"警告: 表 {table[0]} 长时间未更新统计信息，可能导致查询性能下降。")
 
-    # Rule 26: 检查是否有表没有主键
+    # 规则26: 检查是否有表没有主键
     query26 = """
-    SELECT name FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
+    SELECT name FROM sys.tables 
     WHERE type = 'U' AND OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
+    AND name IN ({})
     """
-    cursor.execute(query26)
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query26 = query26.format(placeholders)
+
+    # 执行 SQL 查询，将 tables_in_query 列表作为参数传递给 execute 方法
+    # 这样，每个问号占位符都将被 tables_in_query 列表中的相应表名替换
+    cursor.execute(query26, tables_in_query)
+
+    # 获取查询结果
     tables_without_primary_key = cursor.fetchall()
+
+    # 对于每一个没有主键的表，打印一个警告消息
     for table in tables_without_primary_key:
         print(f"警告: 表 {table[0]} 没有主键，可能导致数据完整性问题和查询性能下降。")
 
-    # Rule 27: 检查是否有过大的表没有聚集索引
+
+
+    # # Rule 27: 检查是否有过大的表没有聚集索引
     query27 = """
     SELECT OBJECT_NAME(i.object_id) AS TableName
     FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) i
     WHERE i.type = 0 AND OBJECTPROPERTY(i.object_id, 'TableHasClustIndex') = 0
     """
     cursor.execute(query27)
+    large_tables_without_clustered_index = cursor.fetchall()
+    for table in large_tables_without_clustered_index:
+        print(f"警告: 表 {table[0]} 没有聚集索引，可能导致查询性能下降和数据存储不连续。")
+
+    # 规则 27: 检查是否有过大的表没有聚集索引
+    query27 = """
+    SELECT OBJECT_NAME(i.object_id) AS TableName
+    FROM sys.indexes i
+    WHERE i.type = 0 AND OBJECTPROPERTY(i.object_id, 'TableHasClustIndex') = 0
+    AND OBJECT_NAME(i.object_id) IN ({})
+    """
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query27 = query27.format(placeholders)
+    cursor.execute(query27, tables_in_query)
     large_tables_without_clustered_index = cursor.fetchall()
     for table in large_tables_without_clustered_index:
         print(f"警告: 表 {table[0]} 没有聚集索引，可能导致查询性能下降和数据存储不连续。")
@@ -340,16 +415,16 @@ def audit_table_structure(conn, tables):
         print(f"警告: 表 {table} 中的列 {column} 使用了已过时的文本数据类型，考虑使用varchar(max)、nvarchar(max)或varbinary(max)替代。")
 
     # Rule 29: 检查是否有表使用了“*”进行查询
-    # query29 = """
-    # SELECT DISTINCT OBJECT_NAME(object_id) AS TableName
-    # FROM sys.dm_exec_query_stats qs
-    # CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
-    # WHERE st.text LIKE '%SELECT * FROM%'
-    # """
-    # cursor.execute(query29)
-    # tables_using_select_star = cursor.fetchall()
-    # for table in tables_using_select_star:
-    #     print(f"警告: 表 {table[0]} 使用了“SELECT *”进行查询，这可能导致查询性能下降和未必要的数据传输。")
+    query29 = """
+    SELECT DISTINCT OBJECT_NAME(object_id) AS TableName
+    FROM sys.dm_exec_query_stats qs
+    CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
+    WHERE st.text LIKE '%SELECT * FROM%'
+    """
+    cursor.execute(query29)
+    tables_using_select_star = cursor.fetchall()
+    for table in tables_using_select_star:
+        print(f"警告: 表 {table[0]} 使用了“SELECT *”进行查询，这可能导致查询性能下降和未必要的数据传输。")
 
     # Rule 30: 检查是否有冗余的外键约束
     query30 = """
@@ -417,42 +492,46 @@ def audit_table_structure(conn, tables):
         print(f"警告: 表 {table} 的统计信息上次更新是在 {last_update}，考虑定期更新统计信息以提高查询性能。")
 
     # Rule 35: 检查是否有大量数据的表没有备份
-    # query35 = """
-    # SELECT name AS TableName, SUM(rows) AS TotalRows
-    # FROM sys.partitions
-    # WHERE index_id IN (0, 1) AND OBJECTPROPERTY(object_id, 'IsUserTable') = 1
-    # GROUP BY name
-    # HAVING SUM(rows) > 1000000
-    # """
-    # cursor.execute(query35)
-    # large_tables_without_backup = cursor.fetchall()
-    # for table, rows in large_tables_without_backup:
-    #     print(f"警告: 表 {table} 有 {rows} 行数据，但没有备份，可能导致数据丢失风险。")
+    query35 = """
+    SELECT name AS TableName, SUM(rows) AS TotalRows
+    FROM sys.partitions
+    WHERE index_id IN (0, 1) AND OBJECTPROPERTY(object_id, 'IsUserTable') = 1
+    GROUP BY name
+    HAVING SUM(rows) > 1000000
+    """
+    cursor.execute(query35)
+    large_tables_without_backup = cursor.fetchall()
+    for table, rows in large_tables_without_backup:
+        print(f"警告: 表 {table} 有 {rows} 行数据，但没有备份，可能导致数据丢失风险。")
 
     # Rule 36: 检查是否存在大量NULL值的列
-    # query36 = """
-    # SELECT table_name, column_name
-    # FROM information_schema.columns
-    # WHERE table_schema = 'dbo' -- 你可以根据实际情况调整schema名称
-    # AND column_name IN
-    #     (SELECT column_name FROM your_database_name.your_table_name
-    #      WHERE (SELECT COUNT(*) FROM your_database_name.your_table_name WHERE column_name IS NULL) > 1000) -- 根据实际情况调整阈值
-    # """
-    # cursor.execute(query36)
-    # columns_with_excessive_nulls = cursor.fetchall()
-    # for table, column in columns_with_excessive_nulls:
-    #     print(f"警告: 表 {table} 中的列 {column} 存在大量NULL值，考虑优化表结构。")
+    query36 = """
+    SELECT table_name, column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'dbo' -- 你可以根据实际情况调整schema名称
+    AND column_name IN
+        (SELECT column_name FROM your_database_name.your_table_name
+         WHERE (SELECT COUNT(*) FROM your_database_name.your_table_name WHERE column_name IS NULL) > 1000) -- 根据实际情况调整阈值
+    """
+    cursor.execute(query36)
+    columns_with_excessive_nulls = cursor.fetchall()
+    for table, column in columns_with_excessive_nulls:
+        print(f"警告: 表 {table} 中的列 {column} 存在大量NULL值，考虑优化表结构。")
 
-    # Rule 37: 检查是否有表缺少主键
+    # 规则 37: 检查是否有表缺少主键
     query37 = """
     SELECT name AS TableName 
-    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
+    FROM sys.tables 
     WHERE OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
+    AND name IN ({})
     """
-    cursor.execute(query37)
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query37 = query37.format(placeholders)
+    cursor.execute(query37, tables_in_query)
     tables_without_primary_keys = cursor.fetchall()
     for table in tables_without_primary_keys:
-        print(f"警告: 表 {table} 缺少主键，可能导致数据完整性问题。")
+        print(f"警告: 表 {table[0]} 缺少主键，可能导致数据完整性问题。")
 
     # Rule 38: 检查是否有表使用GUID作为主键
     query38 = """
@@ -542,56 +621,61 @@ def audit_table_structure(conn, tables):
     for table, column, count in duplicate_data:
         print(f"警告: 在表 {table} 的列 {column} 中找到 {count} 个重复项。考虑删除重复数据。")
 
-    # Rule 45: 检查是否存在未使用的表
+
+    # 规则 45: 检查是否存在未使用的表
     query45 = """
     SELECT name AS TableName 
-    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)
+    FROM sys.tables
     WHERE OBJECTPROPERTY(object_id, 'TableHasClustIndex') = 0
     AND OBJECTPROPERTY(object_id, 'TableHasNonClustIndex') = 0
     AND OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
     AND OBJECTPROPERTY(object_id, 'TableHasUniqueCnst') = 0
     AND OBJECTPROPERTY(object_id, 'TableWithNoTriggers') = 1
+    AND name IN ({})
     """
-    cursor.execute(query45)
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query45 = query45.format(placeholders)
+    cursor.execute(query45, tables_in_query)
     unused_tables = cursor.fetchall()
     for table in unused_tables:
-        print(f"警告: 表 {table} 似乎未被使用。考虑是否可以删除它。")
+        print(f"警告: 表 {table[0]} 似乎未被使用。考虑是否可以删除它。")
 
     # Rule 46: 检查是否存在不带注释的列
-    # query46 = """
-    # SELECT table_name AS TableName, column_name AS ColumnName
-    # FROM information_schema.columns
-    # WHERE column_comment = '' OR column_comment IS NULL
-    # """
-    # cursor.execute(query46)
-    # columns_without_comments = cursor.fetchall()
-    # for table, column in columns_without_comments:
-    #     print(f"警告: 表 {table} 中的列 {column} 缺少注释。为了更好的文档化，请考虑为其添加注释。")
+    query46 = """
+    SELECT table_name AS TableName, column_name AS ColumnName
+    FROM information_schema.columns
+    WHERE column_comment = '' OR column_comment IS NULL
+    """
+    cursor.execute(query46)
+    columns_without_comments = cursor.fetchall()
+    for table, column in columns_without_comments:
+        print(f"警告: 表 {table} 中的列 {column} 缺少注释。为了更好的文档化，请考虑为其添加注释。")
 
     # Rule 47: 检查是否存在过大的表但缺少分区
-    # query47 = """
-    # SELECT table_name AS TableName, SUM(data_length + index_length) AS TotalSize
-    # FROM information_schema.tables
-    # WHERE table_schema = 'your_database_name'  -- 替换为您的数据库名称
-    # GROUP BY table_name
-    # HAVING SUM(data_length + index_length) > 5000000000  -- 大于5GB
-    # """
-    # cursor.execute(query47)
-    # large_tables_without_partitioning = cursor.fetchall()
-    # for table, size in large_tables_without_partitioning:
-    #     print(f"警告: 表 {table} 的大小为 {size} 字节，但未使用分区。考虑为这种大表使用分区。")
+    query47 = """
+    SELECT table_name AS TableName, SUM(data_length + index_length) AS TotalSize
+    FROM information_schema.tables
+    WHERE table_schema = 'your_database_name'  -- 替换为您的数据库名称
+    GROUP BY table_name
+    HAVING SUM(data_length + index_length) > 5000000000  -- 大于5GB
+    """
+    cursor.execute(query47)
+    large_tables_without_partitioning = cursor.fetchall()
+    for table, size in large_tables_without_partitioning:
+        print(f"警告: 表 {table} 的大小为 {size} 字节，但未使用分区。考虑为这种大表使用分区。")
 
     # Rule 48: 检查是否存在带有多个外键约束的表
-    # query48 = """
-    # SELECT table_name AS TableName, COUNT(constraint_name) AS ForeignKeyCount
-    # FROM information_schema.referential_constraints
-    # GROUP BY table_name
-    # HAVING COUNT(constraint_name) > 5  -- 考虑超过5个外键可能过多
-    # """
-    # cursor.execute(query48)
-    # tables_with_excessive_foreign_keys = cursor.fetchall()
-    # for table, count in tables_with_excessive_foreign_keys:
-    #     print(f"警告: 表 {table} 有 {count} 个外键约束，这可能会影响性能。")
+    query48 = """
+    SELECT table_name AS TableName, COUNT(constraint_name) AS ForeignKeyCount
+    FROM information_schema.referential_constraints
+    GROUP BY table_name
+    HAVING COUNT(constraint_name) > 5  -- 考虑超过5个外键可能过多
+    """
+    cursor.execute(query48)
+    tables_with_excessive_foreign_keys = cursor.fetchall()
+    for table, count in tables_with_excessive_foreign_keys:
+        print(f"警告: 表 {table} 有 {count} 个外键约束，这可能会影响性能。")
 
     # Rule 49: 检查是否存在没有主键的表
     query49 = """
@@ -613,9 +697,9 @@ def audit_table_structure(conn, tables):
 
     # Rule 50: 检查是否存在没有索引的表
     query50 = """
-    SELECT t.name AS TableName 
+    SELECT t.name AS TableName
     FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) t
-    LEFT JOIN sys.indexes i ON t.object_id = i.object_id 
+    LEFT JOIN sys.indexes i ON t.object_id = i.object_id
     WHERE i.object_id IS NULL
     """
     cursor.execute(query50)
@@ -623,21 +707,37 @@ def audit_table_structure(conn, tables):
     for table in tables_without_indexes:
         print(f"警告: 表 {table} 没有任何索引，这可能会影响查询性能。")
 
+    # 规则 50: 检查是否存在没有索引的表
+    query50 = """
+     SELECT t.name AS TableName 
+     FROM sys.tables t
+     LEFT JOIN sys.indexes i ON t.object_id = i.object_id 
+     WHERE i.object_id IS NULL
+     AND t.name IN ({})
+     """
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query50 = query50.format(placeholders)
+    cursor.execute(query50, tables_in_query)
+    tables_without_indexes = cursor.fetchall()
+    for table in tables_without_indexes:
+        print(f"警告: 表 {table[0]} 没有任何索引，这可能会影响查询性能。")
+
     # Rule 51: 检查存在自增列但是不是主键的表
-    # query51 = """
-    # SELECT table_name AS TableName, column_name AS ColumnName
-    # FROM information_schema.columns
-    # WHERE extra = 'auto_increment'
-    # AND table_name NOT IN (
-    #     SELECT table_name
-    #     FROM information_schema.key_column_usage
-    #     WHERE constraint_name = 'PRIMARY'
-    # )
-    # """
-    # cursor.execute(query51)
-    # auto_increment_not_primary = cursor.fetchall()
-    # for table, column in auto_increment_not_primary:
-    #     print(f"警告: 表 {table} 的列 {column} 是自增列，但不是主键。考虑将其设置为主键以确保数据的唯一性。")
+    query51 = """
+    SELECT table_name AS TableName, column_name AS ColumnName
+    FROM information_schema.columns
+    WHERE extra = 'auto_increment'
+    AND table_name NOT IN (
+        SELECT table_name
+        FROM information_schema.key_column_usage
+        WHERE constraint_name = 'PRIMARY'
+    )
+    """
+    cursor.execute(query51)
+    auto_increment_not_primary = cursor.fetchall()
+    for table, column in auto_increment_not_primary:
+        print(f"警告: 表 {table} 的列 {column} 是自增列，但不是主键。考虑将其设置为主键以确保数据的唯一性。")
 
     # Rule 52: 检查列数据类型是否适当
     # 例如：用于存储日期的VARCHAR列
@@ -688,19 +788,36 @@ def audit_table_structure(conn, tables):
     for table, index in redundant_indexes:
         print(f"警告: 表 {table} 存在冗余的索引 {index}。考虑删除冗余索引以提高写操作性能。")
 
+    # 规则 55: 检查是否存在冗余的索引
+    query55 = """
+    SELECT OBJECT_NAME(ix.object_id) AS TableName, ix.name AS IndexName
+    FROM sys.indexes ix
+    INNER JOIN sys.index_columns ic1 ON ix.object_id = ic1.object_id AND ix.index_id = ic1.index_id
+    INNER JOIN sys.index_columns ic2 ON ic1.object_id = ic2.object_id AND ic1.column_id = ic2.column_id
+    WHERE ic1.index_id <> ic2.index_id
+    AND ix.object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}))
+    """
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query55 = query55.format(placeholders)
+    cursor.execute(query55, tables_in_query)
+    redundant_indexes = cursor.fetchall()
+    for table, index in redundant_indexes:
+        print(f"警告: 表 {table} 存在冗余的索引 {index}。考虑删除冗余索引以提高写操作性能。")
+
     # Rule 56: 检查是否存在只读表，但仍有索引
     # 这样的表可能不需要多个索引，因为它们不涉及写操作
-    # query56 = """
-    # SELECT table_name AS TableName
-    # FROM information_schema.tables t
-    # LEFT JOIN information_schema.statistics s ON t.table_name = s.table_name
-    # WHERE t.table_comment = 'read_only' AND COUNT(s.index_name) > 1
-    # GROUP BY t.table_name
-    # """
-    # cursor.execute(query56)
-    # readonly_with_multiple_indexes = cursor.fetchall()
-    # for table in readonly_with_multiple_indexes:
-    #     print(f"警告: 表 {table} 是只读的，但存在多个索引。考虑优化其索引结构。")
+    query56 = """
+    SELECT table_name AS TableName
+    FROM information_schema.tables t
+    LEFT JOIN information_schema.statistics s ON t.table_name = s.table_name
+    WHERE t.table_comment = 'read_only' AND COUNT(s.index_name) > 1
+    GROUP BY t.table_name
+    """
+    cursor.execute(query56)
+    readonly_with_multiple_indexes = cursor.fetchall()
+    for table in readonly_with_multiple_indexes:
+        print(f"警告: 表 {table} 是只读的，但存在多个索引。考虑优化其索引结构。")
 
     # Rule 57: 检查是否存在具有默认值的列，但未被引用
     query57 = """
@@ -717,15 +834,15 @@ def audit_table_structure(conn, tables):
         print(f"警告: 表 {table} 的列 {column} 有默认值，但在其他表中未被引用。")
 
     # Rule 59: 检查是否存在无文档的存储过程
-    # query59 = """
-    # SELECT SPECIFIC_NAME AS ProcedureName
-    # FROM information_schema.routines
-    # WHERE ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_COMMENT IS NULL
-    # """
-    # cursor.execute(query59)
-    # undocumented_procedures = cursor.fetchall()
-    # for proc in undocumented_procedures:
-    #     print(f"警告: 存储过程 {proc} 没有文档或描述。")
+    query59 = """
+    SELECT SPECIFIC_NAME AS ProcedureName
+    FROM information_schema.routines
+    WHERE ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_COMMENT IS NULL
+    """
+    cursor.execute(query59)
+    undocumented_procedures = cursor.fetchall()
+    for proc in undocumented_procedures:
+        print(f"警告: 存储过程 {proc} 没有文档或描述。")
 
     # Rule 60: 检查是否存在未设置的外键约束
     query60 = """
@@ -780,11 +897,16 @@ def audit_table_structure(conn, tables):
     # 规则 64: 检查存在超过 5 个索引的表
     query64 = """
     SELECT OBJECT_NAME(ind.object_id) AS TableName, COUNT(*) as IndexCount
-    FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) ind
+    FROM sys.indexes ind
+    WHERE ind.object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}))
     GROUP BY ind.object_id
     HAVING COUNT(*) > 5
     """
-    cursor.execute(query64)
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query64 = query64.format(placeholders)
+
+    cursor.execute(query64, tables_in_query)
     tables_with_excessive_indexes = cursor.fetchall()
     for table, count in tables_with_excessive_indexes:
         print(f"警告: 表 {table} 有 {count} 个索引，可能导致写入性能下降。")
@@ -895,16 +1017,16 @@ def audit_table_structure(conn, tables):
         print(f"警告: 表 {table} 的外键 {fk} 在列 {column} 上没有相应的索引支持。")
 
     # 规则 74: 检查是否有大型表（例如，行数超过100万）但没有聚集索引
-    # query74 = """
-    # SELECT o.name AS TableName, p.rows AS RowCount
-    # FROM sys.objects o
-    # JOIN sys.partitions p ON o.object_id = p.object_id
-    # WHERE o.type = 'U' AND p.index_id = 0 AND p.rows > 1000000
-    # """
-    # cursor.execute(query74)
-    # large_heap_tables = cursor.fetchall()
-    # for table, rows in large_heap_tables:
-    #     print(f"警告: 表 {table} 有 {rows} 行，但没有聚集索引。")
+    query74 = """
+    SELECT o.name AS TableName, p.rows AS RowCount
+    FROM sys.objects o
+    JOIN sys.partitions p ON o.object_id = p.object_id
+    WHERE o.type = 'U' AND p.index_id = 0 AND p.rows > 1000000
+    """
+    cursor.execute(query74)
+    large_heap_tables = cursor.fetchall()
+    for table, rows in large_heap_tables:
+        print(f"警告: 表 {table} 有 {rows} 行，但没有聚集索引。")
 
     # 规则 75: 检查是否有存储过程或函数使用了 'sp_' 前缀
     query75 = """
@@ -968,26 +1090,33 @@ def audit_table_structure(conn, tables):
         print(f"警告: 表 {table.TableName} 的列数为 {table.ColumnCount}，可能是一个宽表。")
 
     # 规则 80: 检查是否有过大的单个事务
-    # query80 = """
-    # SELECT transaction_id, name, start_time,
-    #        DATEDIFF(MINUTE, start_time, GETDATE()) AS duration_in_minutes
-    # FROM sys.dm_tran_active_transactions
-    # WHERE DATEDIFF(MINUTE, start_time, GETDATE()) > 30
-    # """
-    # cursor.execute(query80)
-    # long_transactions = cursor.fetchall()
-    # for txn in long_transactions:
-    #     print(f"警告: 事务 {txn.transaction_id} ({txn.name}) 已经运行了 {txn.duration_in_minutes} 分钟。")
+    query80 = """
+    SELECT transaction_id, name, start_time,
+           DATEDIFF(MINUTE, start_time, GETDATE()) AS duration_in_minutes
+    FROM sys.dm_tran_active_transactions
+    WHERE DATEDIFF(MINUTE, start_time, GETDATE()) > 30
+    """
+    cursor.execute(query80)
+    long_transactions = cursor.fetchall()
+    for txn in long_transactions:
+        print(f"警告: 事务 {txn.transaction_id} ({txn.name}) 已经运行了 {txn.duration_in_minutes} 分钟。")
+
 
     # 规则 81: 检查是否有不常用的索引
     query81 = """
     SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, 
            s.user_seeks + s.user_scans + s.user_lookups AS TotalUses
-    FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query)) i
+    FROM sys.indexes i
     JOIN sys.dm_db_index_usage_stats s ON i.object_id = s.object_id AND i.index_id = s.index_id
     WHERE s.user_seeks + s.user_scans + s.user_lookups < 10
+    AND i.object_id IN (SELECT object_id FROM sys.tables WHERE name IN ({}))
     """
-    cursor.execute(query81)
+
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query81 = query81.format(placeholders)
+
+    cursor.execute(query81, tables_in_query)
     infrequently_used_indexes = cursor.fetchall()
     for index in infrequently_used_indexes:
         print(f"警告: 索引 {index.IndexName} 在表 {index.TableName} 很少被使用，考虑删除。")
@@ -1061,24 +1190,29 @@ def audit_table_structure(conn, tables):
         print(f"警告: 存储过程或函数 {proc_func.ProcedureOrFunctionName} 似乎从未被使用。")
 
     # 规则 88: 检查是否存在相同的索引名但在不同的表中
-    # query88 = """
-    # SELECT index_name, COUNT(DISTINCT table_name) AS table_count
-    # FROM information_schema.statistics
-    # GROUP BY index_name
-    # HAVING COUNT(DISTINCT table_name) > 1
-    # """
-    # cursor.execute(query88)
-    # duplicate_index_names = cursor.fetchall()
-    # for index in duplicate_index_names:
-    #     print(f"警告: 索引名 {index.index_name} 在多个表中使用，可能会导致混淆。")
+    query88 = """
+    SELECT index_name, COUNT(DISTINCT table_name) AS table_count
+    FROM information_schema.statistics
+    GROUP BY index_name
+    HAVING COUNT(DISTINCT table_name) > 1
+    """
+    cursor.execute(query88)
+    duplicate_index_names = cursor.fetchall()
+    for index in duplicate_index_names:
+        print(f"警告: 索引名 {index.index_name} 在多个表中使用，可能会导致混淆。")
 
     # 规则 89: 检查是否有表缺失主键
     query104 = """
     SELECT name AS TableName
-    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
+    FROM sys.tables
     WHERE type = 'U' AND OBJECTPROPERTY(object_id, 'TableHasPrimaryKey') = 0
+    AND name IN ({})
     """
-    cursor.execute(query104)
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query104 = query104.format(placeholders)
+
+    cursor.execute(query104, tables_in_query)
     tables_without_primary_key = cursor.fetchall()
     for table in tables_without_primary_key:
         print(f"警告: 表 {table.TableName} 没有设置主键。")
@@ -1098,11 +1232,16 @@ def audit_table_structure(conn, tables):
     # 规则 91: 检查是否有的表缺少主键
     query91 = """
     SELECT name AS TableName
-    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
+    FROM sys.tables
     WHERE type = 'U' 
     AND OBJECTPROPERTY(object_id,'TableHasPrimaryKey') = 0
+    AND name IN ({})
     """
-    cursor.execute(query91)
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query91 = query91.format(placeholders)
+
+    cursor.execute(query91, tables_in_query)
     tables_without_pk = cursor.fetchall()
     for table in tables_without_pk:
         print(f"警告: 表 {table.TableName} 缺少主键。")
@@ -1207,28 +1346,40 @@ def audit_table_structure(conn, tables):
     for query in select_all_queries:
         print(f"警告: 查询 {query.QueryText} 使用了 SELECT *，可能导致性能下降。")
 
+
     # 规则 100: 检查是否有的表没有统计信息
     query100 = """
     SELECT name AS TableName
-    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) t
+    FROM sys.tables t
     WHERE NOT EXISTS (
         SELECT 1 
         FROM sys.stats s 
         WHERE s.object_id = t.object_id
     )
+    AND name IN ({})
     """
-    cursor.execute(query100)
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query100 = query100.format(placeholders)
+
+    cursor.execute(query100, tables_in_query)
     tables_without_stats = cursor.fetchall()
     for table in tables_without_stats:
         print(f"警告: 表 {table.TableName} 没有相关的统计信息，可能导致查询性能下降。")
 
+
     # 规则 101: 检查是否有表缺失索引
     query105 = """
     SELECT name AS TableName
-    FROM sys.tables WHERE name IN ({}', '{}', '{}', '{}).format(*tables_in_query) 
+    FROM sys.tables
     WHERE type = 'U' AND OBJECTPROPERTY(object_id, 'TableWithNoClusteredIndex') = 1
+    AND name IN ({})
     """
-    cursor.execute(query105)
+    # 为 tables_in_query 列表中的每个表名创建一个问号（?）占位符
+    placeholders = ', '.join('?' for _ in tables_in_query)
+    query105 = query105.format(placeholders)
+
+    cursor.execute(query105, tables_in_query)
     tables_without_clustered_index = cursor.fetchall()
     for table in tables_without_clustered_index:
         print(f"警告: 表 {table.TableName} 没有聚集索引。")
