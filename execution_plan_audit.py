@@ -2178,32 +2178,43 @@ def audit_execution_plan(plan_xml):
     if len(ctes) > 2:  # 假设有超过2个CTE
         print("警告: 查询中存在多个公共表达式（CTE）。")
 
-    # 复合规则 36: 当一个查询中既有并行操作又有串行操作时警告
+    # 复合规则 36: 当一个查询中既有并行操作又有串行操作时警告  #规则之前可以考虑进一步把考虑写的更详细。
     parallel_ops = root.findall(".//RelOp[@Parallel='1']")
     serial_ops = root.findall(".//RelOp[@Parallel='0']")
     if parallel_ops and serial_ops:
-        print("警告: 查询中同时存在并行和串行操作。")
+        print("警告: 查询中同时存在并行和串行操作。混合使用可能导致不稳定的查询性能。考虑检查并行设置和适当调整查询。")
 
+    # 复合规则 37: 检查是否存在多个非聚集索引扫描
+    non_clustered_index_scans = root.findall(
+        ".//RelOp[@PhysicalOp='Index Scan' and not(contains(@Index, 'CLUSTERED'))]")
+    if len(non_clustered_index_scans) > 1:
+        print(
+            "警告: 查询中存在多个非聚集索引扫描。可能存在重叠的索引列，这可能导致性能下降和资源浪费。考虑合并或删除冗余索引。")
 
+    # 复合规则 38: 检查是否使用了LIKE操作符与通配符开始的字符串
+    like_wildcard_scans = root.findall(".//ScalarOperator[contains(., 'LIKE [%')]")
+    if like_wildcard_scans:
+        print(
+            "警告: 查询中使用了LIKE操作符与通配符开始的字符串，这会导致全索引扫描，影响查询效率。考虑避免使用通配符开头的LIKE模式。")
 
+    # 复合规则 39: 检查查询是否涉及大量数据的排序
+    large_sort_operations = root.findall(".//RelOp[@PhysicalOp='Sort' and @EstimatedRows>10000]")
+    if large_sort_operations:
+        print("警告: 查询中存在大量数据的排序操作，这可能导致大量内存使用和性能下降。考虑优化查询或使用索引来帮助排序。")
 
+    # 复合规则 40: 检查查询中是否使用了计算列
+    computed_columns = root.findall(".//DefinedValue[ScalarOperator[contains(., 'COMPUTE SCALAR')]]")
+    if computed_columns:
+        print("警告: 查询中使用了计算列，每次查询时都会重新计算，可能导致性能下降。考虑预先计算或使用持久化计算列。")
 
+    # 复合规则 41: 检查查询中是否过多地使用了OR操作符
+    or_operations = root.findall(".//ScalarOperator[contains(., 'OR')]")
+    if len(or_operations) > 2:
+        print(
+            "警告: 查询中过多地使用了OR操作符，这可能导致查询计划不优化和全表扫描。考虑将OR条件分解为多个简单查询并使用UNION。")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    # 复合规则 42: 检查查询中是否使用了NOT IN或NOT EXISTS
+    not_in_or_exists = root.findall(".//ScalarOperator[contains(., 'NOT IN') or contains(., 'NOT EXISTS')]")
+    if not_in_or_exists:
+        print("警告: 使用NOT IN或NOT EXISTS可能导致全表扫描，影响性能。考虑使用左连接或其他方法替代。")
 
