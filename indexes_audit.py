@@ -386,450 +386,608 @@ def audit_indexes(conn, tables):
 
     # 规则 25: 重复跟16待补充
 
-    # # 规则 26: 检查索引的页面密度
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.avg_page_space_used_in_percent "
-    #     "FROM sys.dm_db_index_physical_stats (NULL, NULL, NULL, NULL, 'SAMPLED') ps "
-    #     "JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id "
-    #     "WHERE ps.avg_page_space_used_in_percent < 80")  # 页面密度低于80%可能是一个问题
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的页面密度低于80%，可能导致存储浪费。")
-    #
-    # # 规则 27: 检查禁用的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.is_disabled = 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 存在被禁用的索引 {result.IndexName}，请考虑启用或删除该索引。")
+    # 规则 26: 检查索引的页面密度
+    query26 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.avg_page_space_used_in_percent 
+    FROM sys.dm_db_index_physical_stats (NULL, NULL, NULL, NULL, 'SAMPLED') ps 
+    JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND ps.avg_page_space_used_in_percent < 80
+    """  # 页面密度低于80%可能是一个问题
+    cursor.execute(query26)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的页面密度低于80%，可能导致存储浪费。")
 
-    # # 规则 28: 检查只在索引中有的列，而在表中没有的列
-    # cursor.execute("SELECT OBJECT_NAME(ic.object_id) AS TableName, c1.name "
-    #                "FROM sys.index_columns ic JOIN sys.columns c1 ON c1.object_id = ic.object_id AND c1.column_id = ic.column_id "
-    #                "LEFT JOIN sys.columns c2 ON ic.object_id = c2.object_id AND ic.column_id = c2.column_id "
-    #                "WHERE c2.name IS NULL")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 在表 {result.TableName} 的索引中存在列 {result.name}，但在表中没有此列。")
-    #
-    # # 规则 29: 检查未使用的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "LEFT JOIN sys.dm_db_index_usage_stats us ON i.object_id = us.object_id AND i.index_id = us.index_id "
-    #                "WHERE us.user_seeks = 0 AND us.user_scans = 0 AND us.user_lookups = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 似乎从未被使用过。考虑删除此索引以节省存储和维护成本。")
-    #
-    # # 规则 30: 检查索引的深度
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.index_depth "
-    #                "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'DETAILED') ps "
-    #                "JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id "
-    #                "WHERE ps.index_depth > 3")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的深度为 {result.index_depth}，可能导致查询性能下降。")
-    #
-    # # # 规则 31: 检查索引是否为在线操作
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.allow_online = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 不允许在线操作。考虑更改此设置以减少维护期间的停机时间。")
-    #
-    # # 规则 32: 检查索引的页数
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.page_count "
-    #                "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps "
-    #                "JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id "
-    #                "WHERE ps.page_count < 1000")  # 假设少于1000页的索引可能不是最佳选择
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 只有 {result.page_count} 页，可能不是最佳索引选择。")
-    #
-    # # 规则 33: 检查索引的读写比率
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, us.user_updates, us.user_seeks + us.user_scans + us.user_lookups AS Reads "
-    #     "FROM sys.dm_db_index_usage_stats us "
-    #     "JOIN sys.indexes i ON i.object_id = us.object_id AND i.index_id = us.index_id "
-    #     "WHERE us.user_updates > (us.user_seeks + us.user_scans + us.user_lookups) * 10")  # 假设更新比读多10倍的索引可能不是最佳选择
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的读写比率可能不是最佳选择，因为其被更新的次数远远超过读取的次数。")
-    #
-    # # 规则 34: 检查过多的非聚集索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, COUNT(*) AS NonClusteredIndexCount "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.type_desc = 'NONCLUSTERED' "
-    #                "GROUP BY OBJECT_NAME(i.object_id) "
-    #                "HAVING COUNT(*) > 5")  # 假设一个表上有超过5个非聚集索引可能是个问题
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上有 {result.NonClusteredIndexCount} 个非聚集索引，可能导致写操作的性能下降。")
-    #
-    # # 规则 35: 检查是否有过多的包含列
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, COUNT(*) AS IncludedColumnCount "
-    #     "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #     "JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id "
-    #     "WHERE ic.is_included_column = 1 "
-    #     "GROUP BY OBJECT_NAME(i.object_id), i.name "
-    #     "HAVING COUNT(*) > 5")  # 假设一个索引包含超过5个列可能不是最佳设计
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 包含 {result.IncludedColumnCount} 个列，可能导致存储和I/O开销增加。")
-    #
-    # # 规则 36: 检查非聚集索引的键列数
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, COUNT(*) AS KeyColumnCount "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id "
-    #                "WHERE i.type_desc = 'NONCLUSTERED' AND ic.is_included_column = 0 "
-    #                "GROUP BY OBJECT_NAME(i.object_id), i.name "
-    #                "HAVING COUNT(*) > 5")  # 假设非聚集索引的键列数超过5可能导致性能下降
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的非聚集索引 {result.IndexName} 的键列数为 {result.KeyColumnCount}，可能导致查询性能下降。")
-    #
-    # # 规则 37: 检查索引的空间利用率
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.avg_page_space_used_in_percent "
-    #     "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps "
-    #     "JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id "
-    #     "WHERE ps.avg_page_space_used_in_percent < 70")  # 假设索引的空间利用率低于70%可能不是最佳选择
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的空间利用率只有 {result.avg_page_space_used_in_percent}%，可能导致存储空间浪费。")
-    #
-    # # 规则 38: 检查索引的大小
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, SUM(ps.page_count) AS PageCount "
-    #     "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps "
-    #     "JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id "
-    #     "GROUP BY i.object_id, i.name "
-    #     "HAVING SUM(ps.page_count) < 128")  # 假设索引大小小于128页可能不是最佳选择
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 只有 {result.PageCount} 页，可能不是最佳索引选择。")
-    #
-    # # 规则 39: 检查索引的填充因子
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.avg_fragmentation_in_percent "
-    #     "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps "
-    #     "JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id "
-    #     "WHERE ps.avg_fragmentation_in_percent > 30")  # 假设索引的填充因子超过30%可能导致性能下降
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的填充因子为 {result.avg_fragmentation_in_percent}%，可能导致查询性能下降。")
-    #
-    # # 规则 40: 检查索引的总体大小
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.page_count * 8 / 1024 AS IndexSizeMB "
-    #     "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps "
-    #     "JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id "
-    #     "WHERE ps.page_count * 8 / 1024 > 1000")  # 假设索引的总体大小超过1GB可能导致存储和I/O开销增加
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的大小为 {result.IndexSizeMB} MB，可能导致存储和I/O开销增加。")
-    #
-    # # 规则 41: 检查未使用的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.dm_db_index_usage_stats u "
-    #                "JOIN sys.indexes i ON i.object_id = u.object_id AND i.index_id = u.index_id "
-    #                "WHERE u.user_seeks = 0 AND u.user_scans = 0 AND u.user_lookups = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 从未被使用过，考虑删除此索引以减少维护成本。")
-    #
-    # # 规则 42: 检查禁用的索引
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(object_id) AS TableName, name AS IndexName FROM sys.indexes WHERE is_disabled = 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 已被禁用，考虑启用或删除此索引。")
-    #
-    # # 规则 43: 检查存在多个非聚集索引的表
-    # cursor.execute("SELECT OBJECT_NAME(object_id) AS TableName, COUNT(*) AS NonClusteredIndexCount "
-    #                "FROM sys.indexes "
-    #                "WHERE type_desc = 'NONCLUSTERED' "
-    #                "GROUP BY object_id HAVING COUNT(*) > 5")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上存在 {result.NonClusteredIndexCount} 个非聚集索引，可能导致写操作性能下降。")
-    #
-    # # # 规则 44: 检查索引的深度
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.depth "
-    #                "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') s "
-    #                "JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id "
-    #                "WHERE s.depth > 4")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的深度为 {result.depth}，可能导致读操作性能下降。")
-    #
-    # # 规则 45: 检查索引是否有过多的前导列
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, COUNT(*) AS LeadingColumnsCount "
-    #                "FROM sys.index_columns c "
-    #                "JOIN sys.indexes i ON i.object_id = c.object_id AND i.index_id = c.index_id "
-    #                "WHERE key_ordinal > 0 AND key_ordinal < 4 "  # key_ordinal < 4 表示列在索引中的位置
-    #                "GROUP BY i.object_id, i.name "
-    #                "HAVING COUNT(*) > 3")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 有 {result.LeadingColumnsCount} 个前导列，可能导致查询性能下降。")
-    #
-    # # 规则 46: 检查过大的索引键大小
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.avg_record_size_in_bytes "
-    #                "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') s "
-    #                "JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id "
-    #                "WHERE s.avg_record_size_in_bytes > 900")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的平均记录大小为 {result.avg_record_size_in_bytes} 字节，可能导致查询性能下降。")
-    #
-    # # # 规则 47: 检查含有大量重复值的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.duplicate_key_count "
-    #                "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') s "
-    #                "JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id "
-    #                "WHERE s.duplicate_key_count > 1000")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 有 {result.duplicate_key_count} 个重复键，可能导致查询性能下降。")
-    #
-    # # 规则 48: 检查过期的索引维护计划
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.last_system_update "
-    #                "FROM sys.dm_db_index_usage_stats s "
-    #                "JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id "
-    #                "WHERE DATEDIFF(DAY, s.last_system_update, GETDATE()) > 180")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 已有超过180天未进行系统维护，请检查索引维护计划。")
-    #
-    # # # 规则 49: 检查导致大量页分裂的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.page_splits_sec "
-    #                "FROM sys.dm_db_index_operational_stats(NULL, NULL, NULL, NULL) s "
-    #                "JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id "
-    #                "WHERE s.page_splits_sec > 10")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 导致大量页分裂，可能需要优化填充因子或考虑重新组织索引。")
-    #
-    # # # 规则 50: 检查导致锁争用的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.lock_wait_count "
-    #                "FROM sys.dm_db_index_operational_stats(NULL, NULL, NULL, NULL) s "
-    #                "JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id "
-    #                "WHERE s.lock_wait_count > 10")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 导致锁争用，可能需要调整事务或考虑优化索引设计。")
-    #
-    # # 规则 51: 检查过长的索引名称
-    # cursor.execute("SELECT OBJECT_NAME(object_id) AS TableName, name AS IndexName "
-    #                "FROM sys.indexes "
-    #                "WHERE LEN(name) > 50")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引名称 {result.IndexName} 过长，可能导致管理困难。")
-    #
-    # # # 规则 52: 检查使用了不建议的数据类型的索引
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, c.name AS ColumnName, t.name AS DataType "
-    #     "FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-    #     "JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id "
-    #     "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-    #     "JOIN sys.types t ON t.user_type_id = c.user_type_id "
-    #     "WHERE t.name IN ('text', 'ntext', 'image')")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 使用了不建议的数据类型 {result.DataType}，可能影响性能。")
-    #
-    # # 规则 53: 检查是否存在非唯一的聚集索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.type_desc = 'CLUSTERED' AND i.is_unique = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的聚集索引 {result.IndexName} 是非唯一的，可能影响查询性能。")
-    #
-    # # 规则 54: 检查使用GUID作为主键的表的索引
-    # # GUID作为主键可能会导致碎片化和插入性能问题。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.columns c ON c.object_id = i.object_id AND c.column_id = i.index_id "
-    #                "WHERE c.system_type_id = 36 AND i.is_primary_key = 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 使用GUID作为主键的索引 {result.IndexName}，可能导致性能问题。")
-    #
-    # # 规则 55: 检查没有任何读取操作的索引
-    # # 如果索引从未用于查询，但经常更新，可能导致不必要的开销。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.dm_db_index_usage_stats s "
-    #                "JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id "
-    #                "WHERE s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 没有任何读取操作，可能是多余的。")
-    #
-    # # # 规则 56: 检查索引的列是否有大量重复的值
-    # # # 高度重复的索引列可能导致索引效率低下。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, c.name AS ColumnName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
-    #                "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-    #                "WHERE c.system_type_id IN (SELECT type_id FROM sys.types WHERE is_replicated = 1)")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的列 {result.ColumnName} 有大量重复值，可能不适合作为索引。")
-    #
-    # # 规则 57: 检查有大量DELETE操作的表的索引碎片情况
-    # # 频繁的DELETE操作可能导致索引碎片化。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.dm_db_index_usage_stats s "
-    #                "JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id "
-    #                "WHERE s.user_updates > (s.user_seeks + s.user_scans + s.user_lookups) * 10")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 更新次数远多于读取次数，可能需要重新评估。")
-    #
-    # # 规则 58: 检查索引的总体大小
-    # # 过大的索引可能导致存储和I/O开销增加。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.type_desc = 'NONCLUSTERED' AND INDEXPROPERTY(i.object_id, i.name, 'IndexKeySize') > 900")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的非聚集索引 {result.IndexName} 的键大小过大，超过了900字节的限制。")
-    #
-    # # 规则 59: 检查索引是否在文件组上有适当的放置
-    # # 为了提供最佳性能，索引通常应该放在与其相关表相同的文件组上。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, f.name AS FileGroupName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.filegroups f ON f.data_space_id = i.data_space_id "
-    #                "WHERE f.name != 'PRIMARY'")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 被放置在文件组 {result.FileGroupName} 而不是在PRIMARY文件组上。")
-    #
-    # # 规则 60: 检查是否存在没有WHERE子句的索引
-    # # 这些索引可能不提供查询性能优势，但会增加写操作的开销。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE NOT EXISTS (SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 0)")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 没有WHERE子句，可能导致不必要的写操作开销。")
-    #
-    # # 规则 61: 检查是否存在禁用的索引
-    # # 禁用的索引不会被查询使用，但仍占用存储空间。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.is_disabled = 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上存在已被禁用的索引 {result.IndexName}，考虑是否删除。")
-    #
-    # # 规则 62: 检查是否存在重复的索引
-    # # 两个或更多的索引如果覆盖相同的列，可能导致冗余和不必要的开销。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "GROUP BY OBJECT_NAME(i.object_id), i.name "
-    #                "HAVING COUNT(*) > 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上存在重复的索引 {result.IndexName}，考虑合并或删除其中的某些索引。")
-    #
-    # # 规则 63: 检查过大的索引键列
-    # # SQL Server 对索引键列有900字节的限制。
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, SUM(c.max_length) AS TotalKeySize "
-    #     "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #     "JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
-    #     "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-    #     "GROUP BY OBJECT_NAME(i.object_id), i.name "
-    #     "HAVING SUM(c.max_length) > 900")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的键大小超过900字节的限制。")
-    #
-    # # 规则 64: 检查包含大量NULL值的列的索引
-    # # 索引中的NULL值可能不提供查询性能优势。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, c.name AS ColumnName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
-    #                "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-    #                "WHERE c.is_nullable = 1")
-    #
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 包含可以包含NULL值的列 {result.ColumnName}，可能不提供查询性能优势。")
-    #
-    # # 规则 65: 检查是否存在仅覆盖一列的非聚集索引
-    # # 在某些情况下，可以考虑将它们合并到其他索引中。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.type_desc = 'NONCLUSTERED' AND i.is_unique = 0 "
-    #                "GROUP BY OBJECT_NAME(i.object_id), i.name "
-    #                "HAVING COUNT(*) = 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上存在仅覆盖一列的非聚集索引 {result.IndexName}，考虑是否合并到其他索引。")
-    #
+    # 规则 27: 检查禁用的索引
+    query27 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+    FROM sys.indexes i 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND i.is_disabled = 1
+    """
+    cursor.execute(query27)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 存在被禁用的索引 {result.IndexName}，请考虑启用或删除该索引。")
+
+    # 规则 28: 检查只在索引中有的列，而在表中没有的列
+    query28 = f"""
+    SELECT OBJECT_NAME(ic.object_id) AS TableName, c1.name 
+    FROM sys.index_columns ic 
+    JOIN sys.columns c1 ON c1.object_id = ic.object_id AND c1.column_id = ic.column_id 
+    LEFT JOIN sys.columns c2 ON ic.object_id = c2.object_id AND ic.column_id = c2.column_id 
+    WHERE OBJECT_NAME(ic.object_id) IN ({formatted_tables}) AND c2.name IS NULL
+    """
+    cursor.execute(query28)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 在表 {result.TableName} 的索引中存在列 {result.name}，但在表中没有此列。")
+
+    # 规则 29: 检查未使用的索引
+    query29 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+    FROM sys.indexes i 
+    LEFT JOIN sys.dm_db_index_usage_stats us ON i.object_id = us.object_id AND i.index_id = us.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
+    AND (us.user_seeks = 0 AND us.user_scans = 0 AND us.user_lookups = 0)
+    """
+    cursor.execute(query29)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 似乎从未被使用过。考虑删除此索引以节省存储和维护成本。")
+
+    # 规则 30: 检查索引的深度
+    query30 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.index_depth 
+    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'DETAILED') ps 
+    JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND ps.index_depth > 3
+    """
+    cursor.execute(query30)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的深度为 {result.index_depth}，可能导致查询性能下降。")
+
+    # 规则 31: 检查是否有可能不支持在线操作的索引
+    query31 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+    FROM sys.indexes i 
+    INNER JOIN sys.tables t ON i.object_id = t.object_id
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    AND EXISTS (
+        SELECT 1 
+        FROM sys.columns c 
+        WHERE c.object_id = t.object_id AND c.system_type_id IN (34, 35, 36, 99, 165, 167, 231, 239, 241)
+    )
+    """
+    cursor.execute(query31)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 可能不支持在线操作，因为它涉及到可能不支持在线操作的数据类型。")
+
+    # 规则 32: 检查索引的页数
+    query32 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.page_count 
+    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps 
+    JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id 
+    WHERE ps.page_count < 1000 AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """
+    cursor.execute(query32)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 只有 {result.page_count} 页，可能不是最佳索引选择。")
+
+    # 规则 33: 检查索引的读写比率
+    query33 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, us.user_updates, us.user_seeks + us.user_scans + us.user_lookups AS Reads 
+    FROM sys.dm_db_index_usage_stats us 
+    JOIN sys.indexes i ON i.object_id = us.object_id AND i.index_id = us.index_id 
+    WHERE us.user_updates > (us.user_seeks + us.user_scans + us.user_lookups) * 10 AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """
+    cursor.execute(query33)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的读写比率可能不是最佳选择，因为其被更新的次数远远超过读取的次数。")
+
+    # 规则 34: 检查过多的非聚集索引
+    query34 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, COUNT(*) AS NonClusteredIndexCount 
+    FROM sys.indexes i 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND i.type_desc = 'NONCLUSTERED' 
+    GROUP BY OBJECT_NAME(i.object_id) 
+    HAVING COUNT(*) > 5
+    """
+    cursor.execute(query34)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上有 {result.NonClusteredIndexCount} 个非聚集索引，可能导致写操作的性能下降。")
+
+    # 规则 35: 检查是否有过多的包含列
+    query35 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, COUNT(*) AS IncludedColumnCount 
+    FROM sys.indexes i 
+    JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND ic.is_included_column = 1 
+    GROUP BY OBJECT_NAME(i.object_id), i.name 
+    HAVING COUNT(*) > 5
+    """
+    cursor.execute(query35)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 包含 {result.IncludedColumnCount} 个列，可能导致存储和I/O开销增加。")
+
+    # 规则 36: 检查非聚集索引的键列数
+    query36 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, COUNT(*) AS KeyColumnCount 
+    FROM sys.indexes i 
+    JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND i.type_desc = 'NONCLUSTERED' AND ic.is_included_column = 0 
+    GROUP BY OBJECT_NAME(i.object_id), i.name 
+    HAVING COUNT(*) > 5
+    """
+    cursor.execute(query36)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的非聚集索引 {result.IndexName} 的键列数为 {result.KeyColumnCount}，可能导致查询性能下降。")
+
+    # 规则 37: 检查索引的空间利用率
+    query37 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.avg_page_space_used_in_percent 
+    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps 
+    JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND ps.avg_page_space_used_in_percent < 70
+    """  # 假设索引的空间利用率低于70%可能不是最佳选择
+
+    cursor.execute(query37)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的空间利用率只有 {result.avg_page_space_used_in_percent}%，可能导致存储空间浪费。")
+
+    # 规则 38: 检查索引的大小
+    query38 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, SUM(ps.page_count) AS PageCount 
+    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps 
+    JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    GROUP BY i.object_id, i.name 
+    HAVING SUM(ps.page_count) < 128
+    """  # 假设索引大小小于128页可能不是最佳选择
+
+    cursor.execute(query38)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 只有 {result.PageCount} 页，可能不是最佳索引选择。")
+
+    # 规则 39: 检查索引的填充因子
+    query39 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.avg_fragmentation_in_percent 
+    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps 
+    JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND ps.avg_fragmentation_in_percent > 30
+    """  # 假设索引的填充因子超过30%可能导致性能下降
+
+    cursor.execute(query39)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的填充因子为 {result.avg_fragmentation_in_percent}%，可能导致查询性能下降。")
+
+    # 规则 40: 检查索引的总体大小
+    query40 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.page_count * 8 / 1024 AS IndexSizeMB 
+    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') ps 
+    JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND ps.page_count * 8 / 1024 > 1000
+    """  # 假设索引的总体大小超过1GB可能导致存储和I/O开销增加
+
+    cursor.execute(query40)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的大小为 {result.IndexSizeMB} MB，可能导致存储和I/O开销增加。")
+
+    # 规则 41: 检查未使用的索引
+    query41 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName
+    FROM sys.dm_db_index_usage_stats u
+    JOIN sys.indexes i ON i.object_id = u.object_id AND i.index_id = u.index_id
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND u.user_seeks = 0 AND u.user_scans = 0 AND u.user_lookups = 0
+    """
+
+    cursor.execute(query41)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 从未被使用过，考虑删除此索引以减少维护成本。")
+
+    # 规则 42: 检查禁用的索引
+    query42 = f"""
+    SELECT OBJECT_NAME(object_id) AS TableName, name AS IndexName 
+    FROM sys.indexes 
+    WHERE OBJECT_NAME(object_id) IN ({formatted_tables}) AND is_disabled = 1
+    """
+    cursor.execute(query42)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 已被禁用，考虑启用或删除此索引。")
+
+    # 规则 43: 检查存在多个非聚集索引的表
+    query43 = f"""
+    SELECT OBJECT_NAME(object_id) AS TableName, COUNT(*) AS NonClusteredIndexCount 
+    FROM sys.indexes 
+    WHERE OBJECT_NAME(object_id) IN ({formatted_tables}) AND type_desc = 'NONCLUSTERED' 
+    GROUP BY object_id HAVING COUNT(*) > 5
+    """
+    cursor.execute(query43)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上存在 {result.NonClusteredIndexCount} 个非聚集索引，可能导致写操作性能下降。")
+
+    # 规则 44: 检查索引的深度
+    query44 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.index_depth 
+    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') s 
+    JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND s.index_depth > 4
+    """
+    cursor.execute(query44)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的深度为 {result.index_depth}，可能导致读操作性能下降。")
+
+    # 规则 45: 检查索引是否有过多的前导列
+    query45 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, COUNT(*) AS LeadingColumnsCount 
+    FROM sys.index_columns c 
+    JOIN sys.indexes i ON i.object_id = c.object_id AND i.index_id = c.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND key_ordinal > 0 AND key_ordinal < 4
+    GROUP BY i.object_id, i.name 
+    HAVING COUNT(*) > 3
+    """
+    cursor.execute(query45)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 有 {result.LeadingColumnsCount} 个前导列，可能导致查询性能下降。")
+
+    # 规则 46: 检查过大的索引键大小
+    query46 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.avg_record_size_in_bytes 
+    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') s 
+    JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND s.avg_record_size_in_bytes > 900
+    """
+    cursor.execute(query46)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的平均记录大小为 {result.avg_record_size_in_bytes} 字节，可能导致查询性能下降。")
+
+    # 规则 47: 检查含有大量重复值的索引
+    query47 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, 
+           (s.page_count * 8 * 1024 / NULLIF(s.avg_record_size_in_bytes, 0)) - s.record_count AS EstimatedDuplicateKeyCount 
+    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'SAMPLED') s 
+    JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id 
+    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
+    AND (s.page_count * 8 * 1024 / NULLIF(s.avg_record_size_in_bytes, 0)) - s.record_count > 1000
+    """
+    cursor.execute(query47)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 估计有 {result.EstimatedDuplicateKeyCount} 个重复键，可能导致查询性能下降。")
+
+    # 规则 48: 检查过期的索引维护计划
+    query48 = f"""
+    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.last_system_update 
+    FROM sys.dm_db_index_usage_stats s 
+    JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id 
+    WHERE DATEDIFF(DAY, s.last_system_update, GETDATE()) > 180
+    AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """
+    cursor.execute(query48)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 已有超过180天未进行系统维护，请检查索引维护计划。")
+
+    # 规则 49: 检查导致大量页分裂的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, 
+               s.leaf_insert_count + s.leaf_delete_count + s.leaf_update_count AS TotalOperations
+        FROM sys.dm_db_index_operational_stats(NULL, NULL, NULL, NULL) s 
+        JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id 
+        WHERE s.leaf_insert_count + s.leaf_delete_count + s.leaf_update_count > 1000  -- 根据您的实际情况选择适当的阈值
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 可能导致大量页分裂，因为它有 {result.TotalOperations} 次的叶操作，可能需要优化填充因子或考虑重新组织索引。")
+
+    # 规则 50: 检查导致锁争用的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, 
+               s.row_lock_wait_count + s.page_lock_wait_count AS TotalLockWaitCount
+        FROM sys.dm_db_index_operational_stats(NULL, NULL, NULL, NULL) s 
+        JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id 
+        WHERE s.row_lock_wait_count + s.page_lock_wait_count > 10
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 导致锁争用，可能需要调整事务或考虑优化索引设计。")
+
+    # 规则 51: 检查过长的索引名称
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(object_id) AS TableName, name AS IndexName 
+        FROM sys.indexes 
+        WHERE LEN(name) > 50
+        AND OBJECT_NAME(object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引名称 {result.IndexName} 过长，可能导致管理困难。")
+
+    # 规则 52: 检查使用了不建议的数据类型的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, col.name AS ColumnName, t.name AS DataType 
+        FROM sys.index_columns ic 
+        JOIN sys.columns col ON col.object_id = ic.object_id AND col.column_id = ic.column_id 
+        JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id 
+        JOIN sys.types t ON t.user_type_id = col.user_type_id 
+        WHERE t.name IN ('text', 'ntext', 'image')
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 使用了不建议的数据类型 {result.DataType}，可能影响性能。")
+
+    # 规则 53: 检查是否存在非唯一的聚集索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        WHERE i.type_desc = 'CLUSTERED' AND i.is_unique = 0 
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的聚集索引 {result.IndexName} 是非唯一的，可能影响查询性能。")
+
+    # 规则 54: 检查使用GUID作为主键的表的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id 
+        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id 
+        WHERE c.system_type_id = 36 AND i.is_primary_key = 1 
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 使用GUID作为主键的索引 {result.IndexName}，可能导致性能问题。")
+
+    # 规则 55: 检查没有任何读取操作的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.dm_db_index_usage_stats s 
+        JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id 
+        WHERE s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0 
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 没有任何读取操作，可能是多余的。")
+
+    # 规则 56: 检查索引的列是否有大量重复的值
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, c.name AS ColumnName 
+        FROM sys.indexes i 
+        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id 
+        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id 
+        WHERE c.system_type_id IN (SELECT user_type_id FROM sys.types WHERE is_replicated = 1)
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的列 {result.ColumnName} 有大量重复值，可能不适合作为索引。")
+
+    # 规则 57: 检查有大量DELETE操作的表的索引碎片情况
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.dm_db_index_usage_stats s 
+        JOIN sys.indexes i ON i.object_id = s.object_id AND i.index_id = s.index_id 
+        WHERE s.user_updates > (s.user_seeks + s.user_scans + s.user_lookups) * 10
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 更新次数远多于读取次数，可能需要重新评估。")
+
+    # 规则 58: 检查索引的总体大小
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        AND i.type_desc = 'NONCLUSTERED' 
+        AND INDEXPROPERTY(i.object_id, i.name, 'IndexKeySize') > 900
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的非聚集索引 {result.IndexName} 的键大小过大，超过了900字节的限制。")
+
+    # 规则 59: 检查索引是否在文件组上有适当的放置
+    # 为了提供最佳性能，索引通常应该放在与其相关表相同的文件组上。
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, f.name AS FileGroupName 
+        FROM sys.indexes i 
+        JOIN sys.filegroups f ON f.data_space_id = i.data_space_id 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        AND f.name != 'PRIMARY'
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 被放置在文件组 {result.FileGroupName} 而不是在PRIMARY文件组上。")
+
+    # 规则 60: 检查是否存在没有作为键的列的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        AND NOT EXISTS (
+            SELECT 1 FROM sys.index_columns ic 
+            WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 0
+        )
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 没有作为键的列，可能导致不必要的写操作开销。")
+
+    # 规则 61: 检查是否存在禁用的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
+        AND i.is_disabled = 1
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上存在已被禁用的索引 {result.IndexName}，考虑是否删除。")
+
+    # 规则 62: 检查是否存在重复的索引
+    cursor.execute(f"""
+        WITH IndexColumns AS (
+            SELECT 
+                i.object_id,
+                i.index_id,
+                i.name AS IndexName,
+                STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.index_column_id) AS ColumnNames
+            FROM sys.indexes i
+            JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+            JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+            WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+            GROUP BY i.object_id, i.index_id, i.name
+        )
+        SELECT OBJECT_NAME(ic1.object_id) AS TableName, ic1.IndexName
+        FROM IndexColumns ic1
+        JOIN IndexColumns ic2 ON ic1.object_id = ic2.object_id AND ic1.index_id <> ic2.index_id
+        WHERE ic1.ColumnNames = ic2.ColumnNames
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上存在重复的索引 {result.IndexName}，考虑合并或删除其中的某些索引。")
+
+    # 规则 63: 检查过大的索引键列
+    # SQL Server 对索引键列有900字节的限制
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, 
+               SUM(CASE WHEN t.name = 'nvarchar' THEN c.max_length / 2 ELSE c.max_length END) AS TotalKeySize
+        FROM sys.indexes i
+        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+        JOIN sys.types t ON t.system_type_id = c.system_type_id
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        GROUP BY OBJECT_NAME(i.object_id), i.name
+        HAVING SUM(CASE WHEN t.name = 'nvarchar' THEN c.max_length / 2 ELSE c.max_length END) > 900
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的键大小超过900字节的限制。")
+
+    # 规则 64: 检查包含大量NULL值的列的索引
+    # 索引中的NULL值可能不提供查询性能优势。
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, c.name AS ColumnName 
+        FROM sys.indexes i 
+        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id 
+        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id 
+        WHERE c.is_nullable = 1
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 包含可以包含NULL值的列 {result.ColumnName}，可能不提供查询性能优势。")
+
+    # 规则 65: 检查是否存在仅覆盖一列的非聚集索引
+    # 在某些情况下，可以考虑将它们合并到其他索引中。
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName
+        FROM sys.indexes i
+        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+        WHERE i.type_desc = 'NONCLUSTERED' AND i.is_unique = 0
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        GROUP BY OBJECT_NAME(i.object_id), i.name
+        HAVING COUNT(*) = 1
+    """)
+
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上存在仅覆盖一列的非聚集索引 {result.IndexName}，考虑是否合并到其他索引。")
+
     # # 规则 66: 检查是否存在未使用的索引
-    # # 未使用的索引不仅占用存储空间，而且会增加写操作的开销。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "LEFT JOIN sys.dm_db_index_usage_stats s ON s.object_id = i.object_id AND s.index_id = i.index_id "
-    #                "WHERE s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上存在未使用的索引 {result.IndexName}，考虑删除。")
-    #
-    # # 规则 67: 检查非聚集索引的深度
-    # # 非聚集索引的深度过深可能影响查询性能。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.index_depth "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.dm_db_index_physical_stats (NULL, NULL, NULL, NULL, 'SAMPLED') s ON s.object_id = i.object_id AND s.index_id = i.index_id "
-    #                "WHERE i.type_desc = 'NONCLUSTERED' AND s.index_depth > 3")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的非聚集索引 {result.IndexName} 的深度为 {result.index_depth}，可能影响查询性能。")
-    #
-    # # 规则 68: 检查非聚集索引的页数
-    # # 如果非聚集索引的页数过少，可能不值得保留。
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.page_count "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.dm_db_index_physical_stats (NULL, NULL, NULL, NULL, 'SAMPLED') s ON s.object_id = i.object_id AND s.index_id = i.index_id "
-    #                "WHERE i.type_desc = 'NONCLUSTERED' AND s.page_count < 10")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的非聚集索引 {result.IndexName} 仅有 {result.page_count} 页，考虑是否删除。")
-    #
+    # 未使用的索引不仅占用存储空间，而且会增加写操作的开销。
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName
+        FROM sys.indexes i
+        LEFT JOIN sys.dm_db_index_usage_stats s ON s.object_id = i.object_id AND s.index_id = i.index_id
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        AND (s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0 OR s.object_id IS NULL)
+    """)
+
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上存在未使用的索引 {result.IndexName}，考虑删除。")
+
+    # 规则 67: 检查非聚集索引的深度
+    # 非聚集索引的深度过深可能影响查询性能。
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.index_depth
+        FROM sys.indexes i 
+        JOIN sys.dm_db_index_physical_stats (NULL, NULL, NULL, NULL, 'SAMPLED') s 
+        ON s.object_id = i.object_id AND s.index_id = i.index_id
+        WHERE i.type_desc = 'NONCLUSTERED' 
+        AND s.index_depth > 3
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的非聚集索引 {result.IndexName} 的深度为 {result.index_depth}，可能影响查询性能。")
+
+    # 规则 68: 检查非聚集索引的页数
+    # 如果非聚集索引的页数过少，可能不值得保留。
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.page_count
+        FROM sys.indexes i 
+        JOIN sys.dm_db_index_physical_stats (NULL, NULL, NULL, NULL, 'SAMPLED') s 
+        ON s.object_id = i.object_id AND s.index_id = i.index_id
+        WHERE i.type_desc = 'NONCLUSTERED' 
+        AND s.page_count < 10
+        AND OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的非聚集索引 {result.IndexName} 仅有 {result.page_count} 页，考虑是否删除。")
+
     # # 规则 69: 检查索引的平均碎片化情况
     # cursor.execute(
     #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, s.avg_fragmentation_in_percent "
@@ -840,7 +998,7 @@ def audit_indexes(conn, tables):
     # for result in results:
     #     print(
     #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的碎片化率为 {result.avg_fragmentation_in_percent}%，考虑重新组织或重建。")
-    #
+
     # # 规则 70: 检查索引的填充因子
     # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, i.fill_factor "
     #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
