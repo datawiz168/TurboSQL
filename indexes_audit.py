@@ -155,16 +155,7 @@ def audit_indexes(conn, tables):
     for table in tables_with_many_indexes:
         print(f"警告: 表 {table[0]} 存在过多的非聚集索引。")
 
-    # 规则 9: 检查禁用的索引
-    query9 = f"""
-        SELECT OBJECT_NAME(i.object_id) AS TableName,
-               i.name AS IndexName
-        FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND i.is_disabled = 1;
-    """
-    cursor.execute(query9)
-    disabled_indexes = cursor.fetchall()
-    for index in disabled_indexes:
-        print(f"警告: 表 {index[0]} 上的索引 {index[1]} 已被禁用。")
+    # 规则 9: 重复删除
 
     # 规则 10: 检查索引创建或修改的日期
     query10 = f"""
@@ -285,23 +276,7 @@ def audit_indexes(conn, tables):
     for index in no_page_locks:
         print(f"警告: 表 {index[0]} 上的索引 {index[1]} 禁止页锁定。")
 
-    # 规则 19: 检查索引的列数
-    query19 = f"""
-    SELECT OBJECT_NAME(ic.object_id) AS TableName,
-           i.name AS IndexName,
-           COUNT(ic.column_id) AS ColumnCount
-    FROM sys.index_columns ic
-    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
-    JOIN sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-    WHERE OBJECT_NAME(ic.object_id) IN ({formatted_tables})
-    GROUP BY ic.object_id, i.name
-    HAVING COUNT(ic.column_id) > 5;
-    """
-
-    cursor.execute(query19)
-    indexes_with_many_columns = cursor.fetchall()
-    for index in indexes_with_many_columns:
-        print(f"警告: 表 {index[0]} 上的索引 {index[1]} 包含超过5个列。")
+    # 规则 19: 删除重复
 
     # 规则 20: 检查有大量INSERT操作的表的索引使用情况
     query20 = f"""
@@ -398,16 +373,7 @@ def audit_indexes(conn, tables):
     for result in results:
         print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的页面密度低于80%，可能导致存储浪费。")
 
-    # 规则 27: 检查禁用的索引
-    query27 = f"""
-    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
-    FROM sys.indexes i 
-    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND i.is_disabled = 1
-    """
-    cursor.execute(query27)
-    results = cursor.fetchall()
-    for result in results:
-        print(f"警告: 表 {result.TableName} 存在被禁用的索引 {result.IndexName}，请考虑启用或删除该索引。")
+    # 规则 27: 删除重复
 
     # 规则 28: 检查只在索引中有的列，而在表中没有的列
     query28 = f"""
@@ -436,18 +402,7 @@ def audit_indexes(conn, tables):
         print(
             f"警告: 表 {result.TableName} 的索引 {result.IndexName} 似乎从未被使用过。考虑删除此索引以节省存储和维护成本。")
 
-    # 规则 30: 检查索引的深度
-    query30 = f"""
-    SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, ps.index_depth 
-    FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, 'DETAILED') ps 
-    JOIN sys.indexes i ON i.object_id = ps.object_id AND i.index_id = ps.index_id 
-    WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND ps.index_depth > 3
-    """
-    cursor.execute(query30)
-    results = cursor.fetchall()
-    for result in results:
-        print(
-            f"警告: 表 {result.TableName} 的索引 {result.IndexName} 的深度为 {result.index_depth}，可能导致查询性能下降。")
+    # 规则 30: 删除重复
 
     # 规则 31: 检查是否有可能不支持在线操作的索引
     query31 = f"""
@@ -857,16 +812,7 @@ def audit_indexes(conn, tables):
     for result in results:
         print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 没有作为键的列，可能导致不必要的写操作开销。")
 
-    # 规则 61: 检查是否存在禁用的索引
-    cursor.execute(f"""
-        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
-        FROM sys.indexes i 
-        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
-        AND i.is_disabled = 1
-    """)
-    results = cursor.fetchall()
-    for result in results:
-        print(f"警告: 表 {result.TableName} 上存在已被禁用的索引 {result.IndexName}，考虑是否删除。")
+    # 规则 61:删除重复
 
     # 规则 62: 检查是否存在重复的索引
     cursor.execute(f"""
@@ -1003,18 +949,7 @@ def audit_indexes(conn, tables):
         print(
             f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的碎片化率为 {result.avg_fragmentation_in_percent}%，考虑重新组织或重建。")
 
-    # 规则 70: 检查索引的填充因子
-    cursor.execute(f"""
-        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, i.fill_factor
-        FROM sys.indexes i
-        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
-        AND i.fill_factor NOT BETWEEN 70 AND 90
-    """)
-
-    results = cursor.fetchall()
-    for result in results:
-        print(
-            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 的填充因子为 {result.fill_factor}%，可能需要调整。")
+    # 规则 70: 待删除
 
     # # 规则 71: 检查索引的列数
     cursor.execute(f"""
@@ -1237,16 +1172,7 @@ def audit_indexes(conn, tables):
     for result in results:
         print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 不支持ONLINE操作。")
 
-    # 规则 87: 检查禁用的索引
-    cursor.execute(f"""
-        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
-        FROM sys.indexes i 
-        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
-        AND i.is_disabled = 1
-    """)
-    results = cursor.fetchall()
-    for result in results:
-        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 被禁用，考虑重新启用或删除它。")
+    # 规则 87: 删除重复
 
     # 规则 88: 检查索引平均碎片化率
     cursor.execute(f"""
