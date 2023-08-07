@@ -1121,249 +1121,317 @@ def audit_indexes(conn, tables):
         print(
             f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 包含大文本列 {result.ColumnName}，可能导致性能下降。")
 
-    # # 规则 78: 检查未使用的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.dm_db_index_usage_stats s ON s.object_id = i.object_id AND s.index_id = i.index_id "
-    #                "WHERE s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 似乎从未被使用过，考虑是否删除。")
-    #
-    # # 规则 79: 检查独立的非聚集索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.type_desc = 'NONCLUSTERED' AND i.is_unique = 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的独立非聚集索引 {result.IndexName} 可能不需要设置为唯一。")
-    #
-    # # 规则 80: 检查是否有不必要的列包含在索引中
-    # cursor.execute("""
-    #     SELECT OBJECT_NAME(i.object_id) AS TableName,
-    #            i.name AS IndexName,
-    #            c.name AS ColumnName
-    #     FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
-    #     JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-    #     JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
-    #     WHERE ic.key_ordinal = 0
-    # """)
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 包含不必要的列 {result.ColumnName}。")
-    #
-    # # 规则 81: 检查非聚集索引是否有过多的列
-    # cursor.execute("""
-    #     SELECT OBJECT_NAME(i.object_id) AS TableName,
-    #            i.name AS IndexName,
-    #            COUNT(ic.column_id) AS ColumnCount
-    #     FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
-    #     JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-    #     WHERE i.type_desc = 'NONCLUSTERED'
-    #     GROUP BY OBJECT_NAME(i.object_id), i.name
-    #     HAVING COUNT(ic.column_id) > 5
-    # """)
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的非聚集索引 {result.IndexName} 有过多的列，列数为 {result.ColumnCount}。")
-    #
-    # # 规则 82: 检查重复的索引名
-    # cursor.execute("SELECT i.name AS IndexName, COUNT(*) AS Count "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "GROUP BY i.name "
-    #                "HAVING COUNT(*) > 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 索引名称 {result.IndexName} 在不同的表上重复使用了 {result.Count} 次。")
-    #
-    # # 规则 83: 检查是否有超出建议长度的索引名称
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, LEN(i.name) AS Length "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE LEN(i.name) > 50")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 名称长度为 {result.Length}，超过建议的长度。")
-    #
-    # # 规则 84: 检查是否有使用保留关键字的索引名称
-    # # 假设我们有一个保留关键字列表
-    # reserved_keywords = ['INDEX', 'TABLE', 'COLUMN']
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     if result.IndexName.upper() in reserved_keywords:
-    #         print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 使用了保留关键字。")
-    #
-    # # 规则 85: 检查是否有未使用的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "LEFT JOIN sys.dm_db_index_usage_stats s ON i.object_id = s.object_id AND i.index_id = s.index_id "
-    #                "WHERE s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 未被使用，考虑删除它。")
-    #
-    # # 规则 86: 检查是否有不支持ONLINE操作的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.type_desc = 'XML' OR i.type_desc = 'SPATIAL'")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 不支持ONLINE操作。")
-    #
-    # # 规则 87: 检查禁用的索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.is_disabled = 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 被禁用，考虑重新启用或删除它。")
-    #
-    # # 规则 88: 检查索引平均碎片化率
-    # cursor.execute("SELECT OBJECT_NAME(a.object_id) AS TableName, a.index_id, avg_fragmentation_in_percent "
-    #                "FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, NULL) a "
-    #                "WHERE avg_fragmentation_in_percent > 30")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引ID {result.index_id} 的碎片化率为 {result.avg_fragmentation_in_percent}%，考虑进行重建或重组。")
-    #
-    # # 规则 89: 检查是否有过多的分区
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, p.partition_number "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id "
-    #                "GROUP BY OBJECT_NAME(i.object_id), i.name "
-    #                "HAVING COUNT(p.partition_number) > 10")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 有 {result.partition_number} 个分区，可能导致查询性能下降。")
-    #
-    # # 规则 90: 检查是否有超过建议大小的索引
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, SUM(p.used_page_count) * 8 / 1024 AS IndexSizeMB "
-    #     "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #     "JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id "
-    #     "GROUP BY OBJECT_NAME(i.object_id), i.name "
-    #     "HAVING SUM(p.used_page_count) * 8 / 1024 > 1000")  # 1GB的建议阈值
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 大小为 {result.IndexSizeMB}MB，超过建议的大小。")
-    #
-    # # 规则 91: 检查非聚集索引的键列数是否过多
-    # cursor.execute("""
-    #     SELECT OBJECT_NAME(i.object_id) AS TableName,
-    #            i.name AS IndexName,
-    #            COUNT(ic.column_id) AS ColumnCount
-    #     FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
-    #     JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
-    #     WHERE i.type_desc = 'NONCLUSTERED'
-    #     GROUP BY OBJECT_NAME(i.object_id), i.name
-    #     HAVING COUNT(ic.column_id) > 5
-    # """)
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 非聚集索引 {result.IndexName} 在表 {result.TableName} 上的键列数为 {result.ColumnCount}，超过建议的数量。")
-    #
-    # # 规则 92: 检查是否有重复的索引名称
-    # cursor.execute("SELECT i.name AS IndexName, COUNT(*) AS Duplicates "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "GROUP BY i.name "
-    #                "HAVING COUNT(*) > 1")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 索引名称 {result.IndexName} 重复 {result.Duplicates} 次。请确保索引名称的唯一性。")
-    #
-    # # 规则 93: 检查是否有不经常使用的索引
-    # cursor.execute(
-    #     "SELECT OBJECT_NAME(ius.object_id) AS TableName, i.name AS IndexName, ius.user_seeks + ius.user_scans AS AccessCount "
-    #     "FROM sys.dm_db_index_usage_stats ius "
-    #     "JOIN sys.indexes i ON ius.object_id = i.object_id AND ius.index_id = i.index_id "
-    #     "WHERE ius.user_seeks + ius.user_scans < 10")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 索引 {result.IndexName} 在表 {result.TableName} 上的访问次数只有 {result.AccessCount} 次，考虑是否需要该索引。")
-    #
-    # # 规则 94: 检查是否有与主键重复的索引
-    # cursor.execute("SELECT OBJECT_NAME(ic.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id "
-    #                "WHERE i.is_primary_key = 0 AND EXISTS ("
-    #                "  SELECT 1 FROM sys.indexes pi "
-    #                "  JOIN sys.index_columns pic ON pi.object_id = pic.object_id AND pi.index_id = pic.index_id "
-    #                "  WHERE pi.is_primary_key = 1 AND i.object_id = pi.object_id AND "
-    #                "  ic.column_id = pic.column_id AND ic.key_ordinal = pic.key_ordinal)")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 与主键重复，可能是冗余的。")
-    #
-    # # 规则 95: 检查是否有未绑定的外键
-    # cursor.execute("SELECT OBJECT_NAME(fk.parent_object_id) AS TableName, fk.name AS ForeignKeyName "
-    #                "FROM sys.foreign_keys fk "
-    #                "LEFT JOIN sys.indexes i ON fk.referenced_object_id = i.object_id AND fk.key_index_id = i.index_id "
-    #                "WHERE i.index_id IS NULL")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 表 {result.TableName} 上的外键 {result.ForeignKeyName} 未绑定到任何索引。")
-    #
-    # # 规则 96: 检查是否有重复的索引结构
-    # cursor.execute("SELECT i1.name AS IndexName1, i2.name AS IndexName2, OBJECT_NAME(i1.object_id) AS TableName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})1 "
-    #                "JOIN sys.indexes i2 ON i1.object_id = i2.object_id "
-    #                "WHERE i1.index_id < i2.index_id AND "
-    #                "EXISTS (SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id1 "
-    #                "JOIN sys.index_columns ic2 ON ic1.object_id = ic2.object_id AND ic1.column_id = ic2.column_id "
-    #                "WHERE ic1.index_id = i1.index_id AND ic2.index_id = i2.index_id)")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 在表 {result.TableName} 上，索引 {result.IndexName1} 和 {result.IndexName2} 的结构相似，可能存在冗余。")
-    #
-    # # 规则 97: 检查是否有非簇集索引的键列数过多
-    # cursor.execute("""
-    #     SELECT OBJECT_NAME(i.object_id) AS TableName,
-    #            i.name AS IndexName,
-    #            COUNT(ic.column_id) AS ColumnCount
-    #     FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
-    #     JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
-    #     WHERE i.type_desc = 'NONCLUSTERED'
-    #     GROUP BY OBJECT_NAME(i.object_id), i.name
-    #     HAVING COUNT(ic.column_id) > 7
-    # """)
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(
-    #         f"警告: 非簇集索引 {result.IndexName} 在表 {result.TableName} 上的键列数为 {result.ColumnCount}，超出建议的数量。")
-    #
-    # # 规则 98: 检查索引是否只包含了部分列，而没有包括所有需要的列
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "WHERE i.is_included_column = 0 AND i.is_key_column = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 索引 {result.IndexName} 在表 {result.TableName} 上可能没有包括所有需要的列。")
-    #
-    # # 规则 99: 检查是否有大量的未使用的索引
-    # cursor.execute("SELECT OBJECT_NAME(ius.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.dm_db_index_usage_stats ius "
-    #                "JOIN sys.indexes i ON ius.object_id = i.object_id AND ius.index_id = i.index_id "
-    #                "WHERE ius.user_seeks + ius.user_scans + ius.user_lookups = 0 AND ius.system_seeks + ius.system_scans + ius.system_lookups = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 索引 {result.IndexName} 在表 {result.TableName} 上未被使用，考虑删除它以减少存储和维护开销。")
-    #
-    # # 规则 100: 检查是否有冷数据被索引
-    # cursor.execute("SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName "
-    #                "FROM sys.indexes i WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) "
-    #                "JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id "
-    #                "WHERE p.rows = 0")
-    # results = cursor.fetchall()
-    # for result in results:
-    #     print(f"警告: 索引 {result.IndexName} 在表 {result.TableName} 上只索引了冷数据，考虑重新评估该索引的需求。")
-    #
+    # 规则 78: 检查未使用的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        JOIN sys.dm_db_index_usage_stats s ON s.object_id = i.object_id AND s.index_id = i.index_id 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        AND s.user_seeks = 0 AND s.user_scans = 0 AND s.user_lookups = 0
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 似乎从未被使用过，考虑是否删除。")
+
+    # 规则 79: 检查独立的非聚集索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        AND i.type_desc = 'NONCLUSTERED' AND i.is_unique = 1
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的独立非聚集索引 {result.IndexName} 可能不需要设置为唯一。")
+
+    # 规则 80: 检查是否有不必要的列包含在索引中
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName,
+               i.name AS IndexName,
+               c.name AS ColumnName
+        FROM sys.indexes i 
+        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND ic.key_ordinal = 0
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 包含不必要的列 {result.ColumnName}。")
+
+    # 规则 81: 检查非聚集索引是否有过多的列
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName,
+               i.name AS IndexName,
+               COUNT(ic.column_id) AS ColumnCount
+        FROM sys.indexes i 
+        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND i.type_desc = 'NONCLUSTERED'
+        GROUP BY OBJECT_NAME(i.object_id), i.name
+        HAVING COUNT(ic.column_id) > 5
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的非聚集索引 {result.IndexName} 有过多的列，列数为 {result.ColumnCount}。")
+
+    # 规则 82: 检查重复的索引名
+    cursor.execute(f"""
+        SELECT i.name AS IndexName, COUNT(*) AS Count 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        GROUP BY i.name 
+        HAVING COUNT(*) > 1
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 索引名称 {result.IndexName} 在不同的表上重复使用了 {result.Count} 次。")
+
+    # 规则 83: 检查是否有超出建议长度的索引名称
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, LEN(i.name) AS Length 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND LEN(i.name) > 50
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 名称长度为 {result.Length}，超过建议的长度。")
+
+    # 规则 84: 检查是否有使用保留关键字的索引名称
+    # 假设我们有一个保留关键字列表
+    reserved_keywords = ['INDEX', 'TABLE', 'COLUMN']
+
+    # 根据表的范围查询索引名称
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+
+    # 检查结果并打印警告
+    for result in results:
+        if result.IndexName and result.IndexName.upper() in reserved_keywords:
+            print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 使用了保留关键字。")
+
+    # 规则 85: 检查是否有未使用的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        LEFT JOIN sys.dm_db_index_usage_stats s ON i.object_id = s.object_id AND i.index_id = s.index_id 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
+        AND (s.user_seeks = 0 OR s.user_seeks IS NULL)
+        AND (s.user_scans = 0 OR s.user_scans IS NULL)
+        AND (s.user_lookups = 0 OR s.user_lookups IS NULL)
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 未被使用，考虑删除它。")
+
+    # 规则 86: 检查是否有不支持ONLINE操作的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
+        AND (i.type_desc = 'XML' OR i.type_desc = 'SPATIAL')
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 不支持ONLINE操作。")
+
+    # 规则 87: 检查禁用的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
+        AND i.is_disabled = 1
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 被禁用，考虑重新启用或删除它。")
+
+    # 规则 88: 检查索引平均碎片化率
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(a.object_id) AS TableName, a.index_id, avg_fragmentation_in_percent 
+        FROM sys.dm_db_index_physical_stats(NULL, NULL, NULL, NULL, NULL) a 
+        WHERE OBJECT_NAME(a.object_id) IN ({formatted_tables})
+        AND avg_fragmentation_in_percent > 30
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引ID {result.index_id} 的碎片化率为 {result.avg_fragmentation_in_percent}%，考虑进行重建或重组。")
+
+    # 规则 89: 检查是否有过多的分区
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName, COUNT(p.partition_number) AS PartitionCount
+        FROM sys.indexes i
+        JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        GROUP BY OBJECT_NAME(i.object_id), i.name
+        HAVING COUNT(p.partition_number) > 10
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 有 {result.PartitionCount} 个分区，可能导致查询性能下降。")
+
+    # 规则 90: 检查是否有超过建议大小的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, 
+               i.name AS IndexName, 
+               SUM(a.used_pages) * 8 / 1024 AS IndexSizeMB 
+        FROM sys.indexes i
+        JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id 
+        JOIN sys.allocation_units a ON p.partition_id = a.container_id
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables})
+        GROUP BY OBJECT_NAME(i.object_id), i.name 
+        HAVING SUM(a.used_pages) * 8 / 1024 > 1000  -- 1GB的建议阈值
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 大小为 {result.IndexSizeMB}MB，超过建议的大小。")
+
+    # 规则 91: 检查非聚集索引的键列数是否过多
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName,
+               i.name AS IndexName,
+               COUNT(ic.column_id) AS ColumnCount
+        FROM sys.indexes i 
+        JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND i.type_desc = 'NONCLUSTERED'
+        GROUP BY OBJECT_NAME(i.object_id), i.name
+        HAVING COUNT(ic.column_id) > 5
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 非聚集索引 {result.IndexName} 在表 {result.TableName} 上的键列数为 {result.ColumnCount}，超过建议的数量。")
+
+    # 规则 92: 检查是否有重复的索引名称
+    cursor.execute(f"""
+        SELECT i.name AS IndexName, COUNT(*) AS Duplicates 
+        FROM sys.indexes i 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
+        GROUP BY i.name 
+        HAVING COUNT(*) > 1
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 索引名称 {result.IndexName} 重复 {result.Duplicates} 次。请确保索引名称的唯一性。")
+
+    # 规则 93: 检查是否有不经常使用的索引
+    cursor.execute(
+        "SELECT OBJECT_NAME(ius.object_id) AS TableName, i.name AS IndexName, ius.user_seeks + ius.user_scans AS AccessCount "
+        "FROM sys.dm_db_index_usage_stats ius "
+        "JOIN sys.indexes i ON ius.object_id = i.object_id AND ius.index_id = i.index_id "
+        "WHERE ius.user_seeks + ius.user_scans < 10")
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 索引 {result.IndexName} 在表 {result.TableName} 上的访问次数只有 {result.AccessCount} 次，考虑是否需要该索引。")
+
+    # 规则 94: 检查是否有与主键重复的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(ic.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) 
+        AND i.is_primary_key = 0 
+        AND EXISTS (
+            SELECT 1 
+            FROM sys.indexes pi 
+            JOIN sys.index_columns pic ON pi.object_id = pic.object_id AND pi.index_id = pic.index_id 
+            WHERE pi.is_primary_key = 1 
+            AND i.object_id = pi.object_id 
+            AND ic.column_id = pic.column_id 
+            AND ic.key_ordinal = pic.key_ordinal
+        )
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的索引 {result.IndexName} 与主键重复，可能是冗余的。")
+
+    # 规则 95: 检查是否有未绑定的外键
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(fk.parent_object_id) AS TableName, fk.name AS ForeignKeyName 
+        FROM sys.foreign_keys fk 
+        LEFT JOIN sys.indexes i ON fk.referenced_object_id = i.object_id AND fk.key_index_id = i.index_id 
+        WHERE i.index_id IS NULL 
+        AND OBJECT_NAME(fk.parent_object_id) IN ({formatted_tables})
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 表 {result.TableName} 上的外键 {result.ForeignKeyName} 未绑定到任何索引。")
+
+    # 规则 96: 检查是否有重复的索引结构
+    cursor.execute(f"""
+        SELECT i1.name AS IndexName1, i2.name AS IndexName2, OBJECT_NAME(i1.object_id) AS TableName 
+        FROM sys.indexes i1 
+        JOIN sys.indexes i2 ON i1.object_id = i2.object_id 
+        WHERE i1.index_id < i2.index_id 
+        AND OBJECT_NAME(i1.object_id) IN ({formatted_tables})
+        AND EXISTS (
+            SELECT 1 
+            FROM sys.index_columns ic1
+            JOIN sys.index_columns ic2 ON ic1.object_id = ic2.object_id AND ic1.column_id = ic2.column_id 
+            WHERE ic1.index_id = i1.index_id AND ic2.index_id = i2.index_id
+        )
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 在表 {result.TableName} 上，索引 {result.IndexName1} 和 {result.IndexName2} 的结构相似，可能存在冗余。")
+
+    # 规则 97: 检查是否有非簇集索引的键列数过多
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName,
+               i.name AS IndexName,
+               COUNT(ic.column_id) AS ColumnCount
+        FROM sys.indexes i 
+        JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND i.type_desc = 'NONCLUSTERED'
+        GROUP BY OBJECT_NAME(i.object_id), i.name
+        HAVING COUNT(ic.column_id) > 7
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(
+            f"警告: 非簇集索引 {result.IndexName} 在表 {result.TableName} 上的键列数为 {result.ColumnCount}，超出建议的数量。")
+
+    # 规则 98: 检查索引是否只包含了部分列，而没有包括所有需要的列
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND ic.is_included_column = 1
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 索引 {result.IndexName} 在表 {result.TableName} 上可能只包含了部分列，而没有包括所有需要的列。")
+
+    # 规则 99: 检查是否有大量的未使用的索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(ius.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.dm_db_index_usage_stats ius 
+        JOIN sys.indexes i ON ius.object_id = i.object_id AND ius.index_id = i.index_id 
+        WHERE OBJECT_NAME(ius.object_id) IN ({formatted_tables})
+        AND ius.user_seeks + ius.user_scans + ius.user_lookups = 0 
+        AND ius.system_seeks + ius.system_scans + ius.system_lookups = 0
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 索引 {result.IndexName} 在表 {result.TableName} 上未被使用，考虑删除它以减少存储和维护开销。")
+
+    # 规则 100: 检查是否有冷数据被索引
+    cursor.execute(f"""
+        SELECT OBJECT_NAME(i.object_id) AS TableName, i.name AS IndexName 
+        FROM sys.indexes i 
+        JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id 
+        WHERE OBJECT_NAME(i.object_id) IN ({formatted_tables}) AND p.rows = 0
+    """)
+    results = cursor.fetchall()
+    for result in results:
+        print(f"警告: 索引 {result.IndexName} 在表 {result.TableName} 上只索引了冷数据，考虑重新评估该索引的需求。")
+
     print("索引审计完成。")
     cursor.close()
     return issues if issues is not None else []
