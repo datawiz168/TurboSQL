@@ -1652,10 +1652,11 @@ def audit_indexes(conn, tables):
     index_depths = cursor.fetchall()
 
     for index in index_depths:
-        expected_depth = round(math.log(index.RecordCount, 2))  # 假设二叉树
-        if index.IndexDepth > expected_depth + 2:  # 允许的深度偏差
-            print(
-                f'警告: 表 {index.TableName} 上的索引 {index.IndexName} 的深度为 {index.IndexDepth}，这可能意味着B树不平衡。预期深度约为 {expected_depth}。')
+        if index.RecordCount > 0:
+            expected_depth = round(math.log(index.RecordCount, 2))  # 假设二叉树
+            if index.IndexDepth > expected_depth + 2:  # 允许的深度偏差
+                print(
+                    f'警告: 表 {index.TableName} 上的索引 {index.IndexName} 的深度为 {index.IndexDepth}，这可能意味着B树不平衡。预期深度约为 {expected_depth}。')
 
     print("索引审计完成。")
     cursor.close()
