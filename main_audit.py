@@ -34,7 +34,7 @@ if __name__ == "__main__":
     server = "localhost"
     database = "AuditDemoDB"
     user = "AuditDemoUser"
-    password = "密码"
+    password = "c2xYO16edKwep"
 
     # 使用连接信息连接到数据库
     conn = connect_to_sql_server(server, database, user, password)
@@ -50,7 +50,7 @@ if __name__ == "__main__":
             break
 
     # 删除查询末尾的';'
-    user_query = user_query.strip()[:-1]  
+    user_query = user_query.strip()[:-1]
     print("正在执行的查询：")
     print(user_query)
 
