@@ -34,7 +34,7 @@ if __name__ == "__main__":
     server = "localhost"
     database = "AuditDemoDB"
     user = "AuditDemoUser"
-    password = ""
+    password = "mm"
 
     # 使用连接信息连接到数据库
     conn = connect_to_sql_server(server, database, user, password)
@@ -76,13 +76,16 @@ if __name__ == "__main__":
     audit_table_structure(conn, tables_in_query)
 
     # 执行SQL查询并获取查询结果
-    cursor = conn.cursor()
-    results = cursor.execute(user_query).fetchall()
+    # cursor = conn.cursor()
+    # results = cursor.execute(user_query).fetchall()
 
     # 如果查询有结果，打印结果
-    if results:
-        for row in results:
-            print(row)
+    # if results:
+    #     for row in results:
+    #         print(row)
 
     # 关闭数据库连接
     conn.close()
+
+
+
