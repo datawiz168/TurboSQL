@@ -34,7 +34,7 @@ if __name__ == "__main__":
     server = "localhost"
     database = "AuditDemoDB"
     user = "AuditDemoUser"
-    password = "c2xYO16edKwep"
+    password = ""
 
     # 使用连接信息连接到数据库
     conn = connect_to_sql_server(server, database, user, password)
