@@ -51,9 +51,9 @@ password = "YOUR_PASSWORD"
 #### 完整借助工具优化sql案例
 case1:
 case2:
-
+```python
 场景二: ERP系统的销售、产品和地区分析
-
+```python
 -- 1. 删除现有表（如果存在，按照依赖关系的相反顺序删除表）
 
 IF OBJECT_ID('OrderDetails', 'U') IS NOT NULL DROP TABLE OrderDetails;
@@ -297,7 +297,7 @@ EXEC InsertDepartments;
 EXEC InsertEmployees;
 EXEC InsertOrders;
 EXEC InsertOrderDetails;
-
+```
 
 
 case3:
