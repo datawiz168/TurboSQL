@@ -49,10 +49,10 @@ password = "YOUR_PASSWORD"
 
 
 ###测试用的数据库版本和操作系统信息：
+
 Microsoft SQL Server 2022 (RTM-GDR) (KB5021522) - 16.0.1050.5 (X64) 
-	Jan 23 2023 17:02:42 
-	Copyright (C) 2022 Microsoft Corporation
-	Developer Edition (64-bit) on Windows 10 Home China 10.0 <X64> (Build 19045: )
+Developer Edition (64-bit) on Windows 10 Home China 10.0 <X64> (Build 19045: )
+
 ---
 #### 完整借助工具优化sql案例
 
