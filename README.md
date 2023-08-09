@@ -55,6 +55,7 @@ case2:
 场景二: ERP系统的销售、产品和地区分析
 
 -- 1. 删除现有表（如果存在，按照依赖关系的相反顺序删除表）
+
 IF OBJECT_ID('OrderDetails', 'U') IS NOT NULL DROP TABLE OrderDetails;
 IF OBJECT_ID('Orders', 'U') IS NOT NULL DROP TABLE Orders;
 IF OBJECT_ID('Employees', 'U') IS NOT NULL DROP TABLE Employees;
@@ -67,6 +68,7 @@ IF OBJECT_ID('Countries', 'U') IS NOT NULL DROP TABLE Countries;
 IF OBJECT_ID('Regions', 'U') IS NOT NULL DROP TABLE Regions;
 
 -- 2. 创建表结构
+
 CREATE TABLE Regions (
     RegionID INT PRIMARY KEY,
     RegionName VARCHAR(100)
@@ -128,6 +130,7 @@ CREATE TABLE OrderDetails (
 );
 
 -- 3.删除存储过程
+
 IF OBJECT_ID('InsertRegions', 'P') IS NOT NULL DROP PROCEDURE InsertRegions;
 IF OBJECT_ID('InsertCountries', 'P') IS NOT NULL DROP PROCEDURE InsertCountries;
 IF OBJECT_ID('InsertLocations', 'P') IS NOT NULL DROP PROCEDURE InsertLocations;
@@ -141,6 +144,7 @@ IF OBJECT_ID('InsertOrderDetails', 'P') IS NOT NULL DROP PROCEDURE InsertOrderDe
 
 -- 4. 创建存储过程
 -- 存储过程插入 Regions
+
 CREATE PROCEDURE InsertRegions
 AS
 BEGIN
@@ -282,6 +286,7 @@ GO
 
 
 -- 5.执行存储过程
+
 EXEC InsertRegions;
 EXEC InsertCountries;
 EXEC InsertLocations;
