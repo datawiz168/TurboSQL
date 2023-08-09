@@ -52,7 +52,7 @@ password = "YOUR_PASSWORD"
 case1:
 case2:
 ```python
-场景二: ERP系统的销售、产品和地区分析
+场景二: ERP系统的销售、产品和地区分析（重点演示效果图）
 ```python
 -- 1. 删除现有表（如果存在，按照依赖关系的相反顺序删除表）
 
@@ -297,6 +297,43 @@ EXEC InsertDepartments;
 EXEC InsertEmployees;
 EXEC InsertOrders;
 EXEC InsertOrderDetails;
+
+--sql语句。
+WITH SalesPerDepartment AS (
+    SELECT r.RegionName, d.DepartmentName, SUM(p.Price * od.Quantity) as TotalSales,
+           ROW_NUMBER() OVER(PARTITION BY r.RegionName ORDER BY SUM(p.Price * od.Quantity) DESC) AS Rank
+    FROM Regions r
+    CROSS JOIN (SELECT TOP 100 1 AS Dummy FROM Regions) DummyTable -- 引入CROSS JOIN
+    JOIN Countries c ON r.RegionID = c.RegionID
+    JOIN Locations l ON c.CountryID = l.CountryID
+    JOIN Departments d ON l.LocationID = d.LocationID
+    JOIN Employees e ON d.DepartmentID = e.JobID
+    JOIN Orders o ON e.EmployeeID = o.EmployeeID
+    JOIN OrderDetails od ON o.OrderID = od.OrderID
+    JOIN Products p ON od.ProductID = p.ProductID
+    JOIN Suppliers s ON p.SupplierID = s.SupplierID
+    JOIN Categories cat ON p.CategoryID = cat.CategoryID
+    WHERE s.SupplierName = 'Supplier1'
+      AND cat.CategoryName = 'Category1'
+      AND o.OrderDate BETWEEN '2023-01-01' AND '2023-12-31'
+      AND (SELECT COUNT(*) FROM Regions) > 0 -- 无效的子查询
+    GROUP BY r.RegionName, d.DepartmentName
+),
+AverageSalesPerRegion AS (
+    SELECT RegionName, AVG(TotalSales) as AverageSales
+    FROM (
+        SELECT RegionName, TotalSales
+        FROM SalesPerDepartment
+        WHERE Rank <= (SELECT MAX(RegionID) FROM Regions) -- 引入复杂条件
+    ) TopSales
+    GROUP BY RegionName
+)
+SELECT spd.RegionName, spd.DepartmentName, spd.TotalSales
+FROM SalesPerDepartment spd
+JOIN AverageSalesPerRegion aspr ON spd.RegionName = aspr.RegionName
+WHERE spd.TotalSales > aspr.AverageSales
+ORDER BY spd.TotalSales DESC;
+
 ```
 
 
