@@ -49,70 +49,9 @@ password = "YOUR_PASSWORD"
 
 ---
 #### 完整借助工具优化sql案例
-case1:模拟医院管理系统
+
 ```python
--- 删除依赖其他表的表
-IF OBJECT_ID('dbo.OrderDetails', 'U') IS NOT NULL DROP TABLE dbo.OrderDetails;
-IF OBJECT_ID('dbo.Orders', 'U') IS NOT NULL DROP TABLE dbo.Orders;
-IF OBJECT_ID('dbo.Employees', 'U') IS NOT NULL DROP TABLE dbo.Employees;
-IF OBJECT_ID('dbo.Departments', 'U') IS NOT NULL DROP TABLE dbo.Departments;
-IF OBJECT_ID('dbo.Products', 'U') IS NOT NULL DROP TABLE dbo.Products;
-IF OBJECT_ID('dbo.Suppliers', 'U') IS NOT NULL DROP TABLE dbo.Suppliers;
-IF OBJECT_ID('dbo.Categories', 'U') IS NOT NULL DROP TABLE dbo.Categories;
-IF OBJECT_ID('dbo.Locations', 'U') IS NOT NULL DROP TABLE dbo.Locations;
-IF OBJECT_ID('dbo.Countries', 'U') IS NOT NULL DROP TABLE dbo.Countries;
-IF OBJECT_ID('dbo.Regions', 'U') IS NOT NULL DROP TABLE dbo.Regions;
-IF OBJECT_ID('dbo.CustomersTest', 'U') IS NOT NULL DROP TABLE dbo.CustomersTest;
-
--- 删除存储过程
-IF OBJECT_ID('dbo.InsertHospitalData', 'P') IS NOT NULL DROP PROCEDURE dbo.InsertHospitalData;
-
---建表
-CREATE TABLE Patients (
-    PatientID INT PRIMARY KEY,
-    PatientName VARCHAR(255),
-    DOB DATE,
-    Gender VARCHAR(10)
-);
-
-CREATE TABLE Doctors (
-    DoctorID INT PRIMARY KEY,
-    DoctorName VARCHAR(255),
-    Specialty VARCHAR(100),
-    DepartmentID INT
-);
-
-CREATE TABLE Departments (
-    DepartmentID INT PRIMARY KEY,
-    DepartmentName VARCHAR(255)
-);
-
-CREATE TABLE Appointments (
-    AppointmentID INT PRIMARY KEY,
-    PatientID INT FOREIGN KEY REFERENCES Patients(PatientID),
-    DoctorID INT FOREIGN KEY REFERENCES Doctors(DoctorID),
-    AppointmentDate DATE
-);
-
-CREATE TABLE Treatments (
-    TreatmentID INT PRIMARY KEY,
-    AppointmentID INT FOREIGN KEY REFERENCES Appointments(AppointmentID),
-    Description VARCHAR(1000),
-    Cost DECIMAL(18, 2)
-);
-
-CREATE TABLE Medications (
-    MedicationID INT PRIMARY KEY,
-    TreatmentID INT FOREIGN KEY REFERENCES Treatments(TreatmentID),
-    MedicationName VARCHAR(255),
-    Dosage VARCHAR(100),
-    DurationDays INT
-);
-```
-
-case2:
-```python
-场景二: ERP系统的销售、产品和地区分析（重点演示效果图）
+场景一: ERP系统的销售、产品和地区分析（重点演示效果图。）
 ```python
 -- 1. 删除现有表（如果存在，按照依赖关系的相反顺序删除表）
 
@@ -396,7 +335,6 @@ ORDER BY spd.TotalSales DESC;
 
 ```
 
-
 #### SQL Server 审计工具评价
 功能完整性
     SQL 语句审核: 通过分析 SQL 查询，工具可以识别出潜在的安全和性能问题。这是一个强大的功能，可以在开发阶段捕获潜在的问题。
@@ -421,3 +359,4 @@ ORDER BY spd.TotalSales DESC;
 2023/8/6 ①索引审计表范围修复。待处理：①索引审计去重，补充部分规则。③表结构表范围修复。③存储过程生成各种表跟数据-各种待优化sql生成-审计调优建议生成-根据建议改写sql-校验（逻辑分析，哈希，随机，）完整流程case整理。
 2023/8/7 ③索引审计修复，去重，补充高级规则。
 2023/8/8 ①表结构去重，递增，表范围限定。②执行计划部分规则校验。创建表,数据,存储过程，sql语句，测试是否触发规则。下一步：测试一些复杂sql，看看能否触发更多执行计划审计部分规则，修正部分执行计划规则。整体验证工具效果。修改readme。
+2023/8/9 ①修复部分执行计划审核规则②演示案例。
