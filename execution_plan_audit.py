@@ -46,7 +46,8 @@ def audit_execution_plan(plan_xml):
         print(f"解析执行计划时出错: {e}")
         return
     ''''
-    已校验规则1,4,5,6,103,168,225,231,254,304,308,318
+    已校验规则1,4,5,6,103,168,225,231,254,255,256,304,308,315,318,319,329
+    复合规则10,
     '''
     print("开始进行执行计划审计...")
     # 规则 1: 检查全表扫描 √
@@ -903,10 +904,7 @@ def audit_execution_plan(plan_xml):
     if compute_scalar_ops:
         print("警告: 查询中存在Compute Scalar操作，可能会导致额外的计算开销,并且可能有计算可以优化。")
 
-    # 规则 169: 检查Sequence Project操作
-    sequence_project_ops = root.findall(".//SequenceProject")
-    if sequence_project_ops:
-        print("警告: 查询中存在Sequence Project操作，可能会影响查询性能。")
+    # 规则 169: 重复删除
 
     # 规则 170: 重复删除
 
@@ -1083,10 +1081,7 @@ def audit_execution_plan(plan_xml):
     if non_optimized_bitmaps:
         print("警告: 查询中存在非优化的Bitmap操作，考虑进一步优化查询。")
 
-    # 规则 209: 检查Sequence Project操作，可能意味着查询需要优化
-    sequence_projects = root.findall(".//*[@PhysicalOp='Sequence Project']")
-    if sequence_projects:
-        print("警告: 查询中存在Sequence Project操作，可能需要进一步优化。")
+    # 规则 209: 重复删除
 
     # 规则 210: 重复删除
 
@@ -1300,12 +1295,12 @@ def audit_execution_plan(plan_xml):
     if stream_aggregates:
         print("警告: 查询中存在流聚合操作，这在大数据集上可能不高效。")
 
-    # 规则 255: 检查存在的窗口聚合，因为它们可能影响性能
+    # 规则 255: 检查存在的窗口聚合，因为它们可能影响性能 √
     window_aggs = root.findall(".//*[@PhysicalOp='Window Aggregate']")
     if window_aggs:
         print("警告: 查询中存在窗口聚合操作，这可能影响性能。")
 
-    # 规则 256: 检查存在的序列投影，它们可能导致内存压力
+    # 规则 256: 检查存在的序列投影，它们可能导致内存压力 √
     sequence_projections = root.findall(".//*[@PhysicalOp='Sequence Project']")
     if sequence_projections:
         print("警告: 查询中存在序列投影操作，这可能导致内存压力。")
@@ -1607,7 +1602,7 @@ def audit_execution_plan(plan_xml):
 
     # 规则 314: 重复删除
 
-    # 规则 315: 检查Filter操作，可能意味着查询在获取数据后进行过滤。
+    # 规则 315: 检查Filter操作，可能意味着查询在获取数据后进行过滤。√
     filter_operations = root.findall(".//*[@PhysicalOp='Filter']")
     if filter_operations:
         print("警告: 查询中存在Filter操作，可能意味着查询在获取数据后进行过滤。考虑在数据获取前进行过滤，或优化查询条件。")
@@ -1627,7 +1622,7 @@ def audit_execution_plan(plan_xml):
     if segment_operations:
         print("警告: 查询中存在Segment操作，可能与窗口函数或分段操作有关。考虑优化查询。")
 
-    # 规则 319: 检查Assert操作，可能意味着查询正在验证某些条件。
+    # 规则 319: 检查Assert操作，可能意味着查询正在验证某些条件。√
     assert_operations = root.findall(".//*[@PhysicalOp='Assert']")
     if assert_operations:
         print("警告: 查询中存在Assert操作，可能意味着查询正在验证某些条件。考虑优化查询或验证条件。")
@@ -1671,7 +1666,7 @@ def audit_execution_plan(plan_xml):
     if columnstore_index_scan_operations:
         print("警告: 查询中存在Columnstore Index Scan操作，考虑优化列存储索引策略。")
 
-    # 规则 329: 检查Concatenation操作，可能与多个数据集合连接有关
+    # 规则 329: 检查Concatenation操作，可能与多个数据集合连接有关 √
     concatenation_operations = root.findall(".//*[@PhysicalOp='Concatenation']")
     if concatenation_operations:
         print("警告: 查询中存在Concatenation操作，考虑优化数据集合连接策略。")
@@ -1873,7 +1868,7 @@ def audit_execution_plan(plan_xml):
         if large_tables_involved:
             print("警告: 查询中存在多个大表的交叉连接，可能导致性能问题。")
 
-    # 复合规则 10: 检查多阶段聚合
+    # 复合规则 10: 检查多阶段聚合 √
     aggregates = root.findall(".//*[@PhysicalOp='Hash Match']")
     aggregates = [agg for agg in aggregates if agg.get('LogicalOp') == 'Aggregate']
 
@@ -2180,3 +2175,23 @@ def audit_execution_plan(plan_xml):
         print("警告: 使用NOT IN或NOT EXISTS可能导致全表扫描，影响性能。考虑使用左连接或其他方法替代。")
 
     print("执行计划审计完成。")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
