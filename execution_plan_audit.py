@@ -36,7 +36,6 @@ def get_execution_plan(conn, query):
 
     return plan
 
-
 def audit_execution_plan(plan_xml):
     """
     审计获取的执行计划，并返回任何潜在的性能问题。
@@ -46,20 +45,13 @@ def audit_execution_plan(plan_xml):
     except Exception as e:
         print(f"解析执行计划时出错: {e}")
         return
-
-    # 使用最基础的 XPath 查询来查找所有 TableScan
-    table_scans = root.findall(".//TableScan")
-    for ts in table_scans:
-        # 使用 Python 来检查每个 TableScan 是否有 Index 子元素
-        index_elements = [elem for elem in ts if elem.tag == 'Index']
-        if not index_elements:
-            print("警告: 查询包含全表扫描。考虑添加适当的索引来提高性能。")
-            break
+    ''''
+    已校验规则1,4,5,6,103，
+    '''
     print("开始进行执行计划审计...")
-    # 规则 1: 检查全表扫描
-    table_scans = root.findall(".//TableScan")
-    full_scans = [ts for ts in table_scans if ts.find(".//Index") is None]
-    if full_scans:
+    # 规则 1: 检查全表扫描 √
+    table_scans = root.findall(".//*[@PhysicalOp='Table Scan']")
+    if table_scans:
         print("警告: 查询中存在全表扫描，可能影响性能。")
 
     # 规则 2: 检查缺失的索引
@@ -72,40 +64,41 @@ def audit_execution_plan(plan_xml):
 
     # 规则 3: 检查预估的行数与实际行数的偏差
     rel_ops = root.findall(".//RelOp")
-    discrepancies = [ro for ro in rel_ops if ro.get('EstimatedRows') != ro.get('ActualRows')]
+    discrepancies = [ro for ro in rel_ops if float(ro.get('EstimateRows', '0')) != float(ro.get('ActualRows', '0'))]
     if discrepancies:
         print("警告: 预估的行数与实际行数有较大偏差，可能需要更新统计信息。")
 
-    # 规则 4: 检查并行查询
-    parallel_queries = root.findall(".//QueryPlan[DegreeOfParallelism>1]")
+    # 规则 4: 检查并行查询 √
+    parallel_queries = [element for element in root.iter() if
+                        element.tag.endswith('RelOp') and element.get('Parallel') == '1']
     if parallel_queries:
         print("警告: 查询并行执行，可能导致资源争用。")
 
-    # 规则 5: 检查排序操作
-    sort_ops = root.findall(".//Sort")
+    # 规则 5: 检查排序操作 √
+    sort_ops = root.findall(".//*[@PhysicalOp='Sort']")
     if sort_ops:
         print("警告: 查询中存在排序操作，可能影响性能。")
 
-    # 规则 6: 检查哈希匹配
-    hash_matches = root.findall(".//HashMatch")
+    # 规则 6: 检查哈希匹配 √
+    # 注意: 在 SQL Server 的 XML 执行计划中，哈希匹配可能被表示为 PhysicalOp 属性值为 'Hash Match' 的元素
+    hash_matches = root.findall(".//*[@PhysicalOp='Hash Match']")
     if hash_matches:
         print("警告: 查询中存在哈希匹配，可能需要大量内存。")
 
     # 规则 7: 检查昂贵的操作
-    high_cost_ops = root.findall(".//RelOp[@EstimatedTotalSubtreeCost>10]")  # Arbitrary threshold
+    high_cost_ops = root.findall(".//RelOp[@EstimatedTotalSubtreeCost>10]")
     if high_cost_ops:
         print("警告: 查询中存在昂贵的操作，考虑优化查询。")
 
     # 规则 8: 检查子查询
-    subqueries = root.findall(".//Subquery")
+    subqueries = root.findall(".//RelOp[@Action='Subquery']")
     if subqueries:
         print("警告: 子查询可能不如连接效率。")
 
-    # 规则 9: 检查悬挂的索引扫描
-    hanging_index_scans = [index_scan for index_scan in root.findall(".//IndexScan") if
-                           index_scan.find("SeekPredicates") is None]
-    if hanging_index_scans:
-        print("警告: 存在悬挂的索引扫描，可能意味着查询条件没有被索引覆盖。")
+    # 规则 9: 检查索引扫描
+    index_scans = root.findall(".//*[@PhysicalOp='Index Scan']")
+    if index_scans:
+        print("警告: 查询中存在索引扫描，可能影响性能。")
 
     # 规则 10: 检查内存或磁盘溢出
     spills = root.findall(".//SpillToTempDb")
@@ -486,9 +479,6 @@ def audit_execution_plan(plan_xml):
         if io_cost > 50:  # 假设阈值为50，实际值需要根据具体情况确定
             print("警告: 查询的I/O成本异常高，考虑优化查询或相关配置。")
 
-
-
-
     # 规则 84: 检查不必要的数据分隔
     unnecessary_data_separations = root.findall(".//Separation")
     if unnecessary_data_separations:
@@ -584,7 +574,7 @@ def audit_execution_plan(plan_xml):
     if index_scans:
         print("警告: 查询中存在索引扫描，而不是索引查找。考虑修改查询或优化索引。")
 
-    # 规则 103: 检查高代价操作
+    # 规则 103: 检查高代价操作 √
     high_cost_ops = [op for op in root.findall(".//*") if float(op.get('EstimatedTotalSubtreeCost', 0)) > 10.0]
     if high_cost_ops:
         print("警告: 查询中存在高代价的操作，可能影响性能。")
@@ -1076,7 +1066,6 @@ def audit_execution_plan(plan_xml):
     if nested_subqueries:
         print("警告: 查询中存在大量的嵌套子查询，可能导致性能下降。考虑将部分子查询改写为连接或临时表。")
 
-    # ... [继续上一个文件中的代码]
 
     # 规则 201: 检查Hash Match操作，可能意味着查询需要优化
     hash_matches = root.findall(".//RelOp[@PhysicalOp='Hash Match']")
