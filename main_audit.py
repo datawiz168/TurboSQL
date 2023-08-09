@@ -3,6 +3,11 @@ from execution_plan_audit import audit_execution_plan
 from indexes_audit import audit_indexes
 from table_structure_audit import audit_table_structure
 import pyodbc
+import platform
+
+def print_python_version():
+    python_version = platform.python_version()
+    print("正在使用的Python解释器版本：", python_version)
 
 # 定义连接到SQL Server的函数
 def connect_to_sql_server(server, database, user, password):
@@ -29,15 +34,28 @@ def get_execution_plan_for_query(query, conn):
         # 关闭SHOWPLAN_XML模式
         cursor.execute('SET SHOWPLAN_XML OFF')
 
+def print_database_version_and_os(conn):
+    with conn.cursor() as cursor:
+        # 查询数据库版本和操作系统信息
+        cursor.execute("SELECT @@VERSION")
+        version_info = cursor.fetchone()[0]
+        print("数据库版本和操作系统信息：")
+        print(version_info)
+
+
 if __name__ == "__main__":
     # 定义数据库连接信息
     server = "localhost"
     database = "AuditDemoDB"
     user = "AuditDemoUser"
-    password = "mm"
+    password = "c2xYO16edKwep"
 
     # 使用连接信息连接到数据库
     conn = connect_to_sql_server(server, database, user, password)
+    # 打印数据库版本和操作系统信息
+    print_database_version_and_os(conn)
+    #打印解释器信息
+    print_python_version()
 
     # 获取用户输入的SQL查询
     user_query = ""
@@ -86,6 +104,3 @@ if __name__ == "__main__":
 
     # 关闭数据库连接
     conn.close()
-
-
-
