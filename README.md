@@ -32,6 +32,7 @@
 pip install pyodbc
 pip install sqlparse
 pip install sql_metadata
+pip install lxml
 ```
 
 #### 使用方法
