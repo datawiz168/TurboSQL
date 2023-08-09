@@ -1,7 +1,53 @@
 import pyodbc
+import sqlparse
+from sqlparse.sql import IdentifierList, Identifier
+from sqlparse.tokens import Keyword, DML
+from sql_metadata import Parser
+
+def extract_tables_from_sql(sql):
+    """使用 sql-metadata 库的 Parser 类从 SQL 查询中提取表名。"""
+    return Parser(sql).tables
+
+def _extract_table_identifiers(token_stream):
+    """Yield table names from a stream of tokens."""
+    if not hasattr(token_stream, 'tokens'):
+        return
+
+    for item in token_stream.tokens:
+        if isinstance(item, IdentifierList):
+            for identifier in item.get_identifiers():
+                yield identifier.get_real_name()
+        elif isinstance(item, Identifier):
+            yield item.get_real_name()
+
+def _is_subselect(parsed):
+    """Return True if statement is a subselect."""
+    if not parsed.is_group:
+        return False
+    for item in parsed.tokens:
+        if item.ttype is DML and item.value.upper() == 'SELECT':
+            return True
+    return False
+
+def _extract_from_part(parsed):
+    """Extract table names from FROM part of the statement."""
+    tables = set()
+    from_seen = False
+    for item in parsed.tokens:
+        if from_seen:
+            if _is_subselect(item):
+                tables.update(_extract_from_part(item))
+            elif item.ttype is Keyword:
+                from_seen = False
+            else:
+                tables.update(_extract_table_identifiers(item))
+        elif item.ttype is Keyword and item.value.upper() == 'FROM':
+            from_seen = True
+    return tables
 
 # 审核SQL查询的函数
 def audit_query(query):
+    print("开始进行SQL语句审计...")
     issues = []  # 初始化issues为一个空列表
     #  规则1：检查是否使用了NOLOCK
     if "NOLOCK" in query:
@@ -930,5 +976,5 @@ def audit_query(query):
     # 规则221：检查是否使用了不推荐的HOLDLOCK查询提示
     if "WITH (HOLDLOCK)" in query:
         print("警告: 使用HOLDLOCK查询提示可能会导致保持锁。")
-
+    print("SQL语句审计完成。")
     return issues
