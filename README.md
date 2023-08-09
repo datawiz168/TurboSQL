@@ -49,7 +49,67 @@ password = "YOUR_PASSWORD"
 
 ---
 #### 完整借助工具优化sql案例
-case1:
+case1:模拟医院管理系统
+
+-- 删除依赖其他表的表
+IF OBJECT_ID('dbo.OrderDetails', 'U') IS NOT NULL DROP TABLE dbo.OrderDetails;
+IF OBJECT_ID('dbo.Orders', 'U') IS NOT NULL DROP TABLE dbo.Orders;
+IF OBJECT_ID('dbo.Employees', 'U') IS NOT NULL DROP TABLE dbo.Employees;
+IF OBJECT_ID('dbo.Departments', 'U') IS NOT NULL DROP TABLE dbo.Departments;
+IF OBJECT_ID('dbo.Products', 'U') IS NOT NULL DROP TABLE dbo.Products;
+IF OBJECT_ID('dbo.Suppliers', 'U') IS NOT NULL DROP TABLE dbo.Suppliers;
+IF OBJECT_ID('dbo.Categories', 'U') IS NOT NULL DROP TABLE dbo.Categories;
+IF OBJECT_ID('dbo.Locations', 'U') IS NOT NULL DROP TABLE dbo.Locations;
+IF OBJECT_ID('dbo.Countries', 'U') IS NOT NULL DROP TABLE dbo.Countries;
+IF OBJECT_ID('dbo.Regions', 'U') IS NOT NULL DROP TABLE dbo.Regions;
+IF OBJECT_ID('dbo.CustomersTest', 'U') IS NOT NULL DROP TABLE dbo.CustomersTest;
+
+-- 删除存储过程
+IF OBJECT_ID('dbo.InsertHospitalData', 'P') IS NOT NULL DROP PROCEDURE dbo.InsertHospitalData;
+
+--建表
+CREATE TABLE Patients (
+    PatientID INT PRIMARY KEY,
+    PatientName VARCHAR(255),
+    DOB DATE,
+    Gender VARCHAR(10)
+);
+
+CREATE TABLE Doctors (
+    DoctorID INT PRIMARY KEY,
+    DoctorName VARCHAR(255),
+    Specialty VARCHAR(100),
+    DepartmentID INT
+);
+
+CREATE TABLE Departments (
+    DepartmentID INT PRIMARY KEY,
+    DepartmentName VARCHAR(255)
+);
+
+CREATE TABLE Appointments (
+    AppointmentID INT PRIMARY KEY,
+    PatientID INT FOREIGN KEY REFERENCES Patients(PatientID),
+    DoctorID INT FOREIGN KEY REFERENCES Doctors(DoctorID),
+    AppointmentDate DATE
+);
+
+CREATE TABLE Treatments (
+    TreatmentID INT PRIMARY KEY,
+    AppointmentID INT FOREIGN KEY REFERENCES Appointments(AppointmentID),
+    Description VARCHAR(1000),
+    Cost DECIMAL(18, 2)
+);
+
+CREATE TABLE Medications (
+    MedicationID INT PRIMARY KEY,
+    TreatmentID INT FOREIGN KEY REFERENCES Treatments(TreatmentID),
+    MedicationName VARCHAR(255),
+    Dosage VARCHAR(100),
+    DurationDays INT
+);
+
+
 case2:
 ```python
 场景二: ERP系统的销售、产品和地区分析（重点演示效果图）
@@ -336,8 +396,6 @@ ORDER BY spd.TotalSales DESC;
 
 ```
 
-
-case3:
 
 #### SQL Server 审计工具评价
 功能完整性
