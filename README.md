@@ -50,7 +50,7 @@ password = "YOUR_PASSWORD"
 ---
 #### 完整借助工具优化sql案例
 case1:模拟医院管理系统
-
+```python
 -- 删除依赖其他表的表
 IF OBJECT_ID('dbo.OrderDetails', 'U') IS NOT NULL DROP TABLE dbo.OrderDetails;
 IF OBJECT_ID('dbo.Orders', 'U') IS NOT NULL DROP TABLE dbo.Orders;
@@ -108,7 +108,7 @@ CREATE TABLE Medications (
     Dosage VARCHAR(100),
     DurationDays INT
 );
-
+```
 
 case2:
 ```python
