@@ -46,7 +46,7 @@ def audit_execution_plan(plan_xml):
         print(f"解析执行计划时出错: {e}")
         return
     ''''
-    已校验规则1,4,5,6,103，
+    已校验规则1,4,5,6,103,168,225,231,254,304,308,318
     '''
     print("开始进行执行计划审计...")
     # 规则 1: 检查全表扫描 √
@@ -77,13 +77,13 @@ def audit_execution_plan(plan_xml):
     # 规则 5: 检查排序操作 √
     sort_ops = root.findall(".//*[@PhysicalOp='Sort']")
     if sort_ops:
-        print("警告: 查询中存在排序操作，可能影响性能。")
+        print("警告: 查询中存在Sort操作，可能意味着查询正在对数据进行排序。考虑优化排序策略或使用索引。")
 
     # 规则 6: 检查哈希匹配 √
     # 注意: 在 SQL Server 的 XML 执行计划中，哈希匹配可能被表示为 PhysicalOp 属性值为 'Hash Match' 的元素
     hash_matches = root.findall(".//*[@PhysicalOp='Hash Match']")
     if hash_matches:
-        print("警告: 查询中存在哈希匹配，可能需要大量内存。")
+        print("警告: 查询中存在哈希匹配，可能需要大量内存。这可能表示没有找到合适的索引。考虑优化查询或添加合适的索引。")
 
     # 规则 7: 检查昂贵的操作
     high_cost_ops = root.findall(".//RelOp[@EstimatedTotalSubtreeCost>10]")
@@ -106,7 +106,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在内存或磁盘溢出，可能影响性能。")
 
     # 规则 11: 检查嵌套循环
-    nested_loops = root.findall(".//NestedLoop")
+    nested_loops = root.findall(".//NestedLoops")
     if nested_loops:
         print("警告: 查询中存在嵌套循环，可能在大数据集上效率低下。")
 
@@ -127,7 +127,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在数据类型转换或隐式转换，可能会阻止索引的使用。")
 
     # 规则 15: 检查大量的数据移动
-    data_movements = root.findall(".//RelOp[@PhysicalOp='Parallelism']")
+    data_movements = root.findall(".//*[@PhysicalOp='Parallelism']")
     if data_movements:
         print("警告: 查询中存在大量的数据移动，如数据溢出到磁盘。")
 
@@ -609,10 +609,7 @@ def audit_execution_plan(plan_xml):
     if external_table_ops:
         print("警告: 查询中存在外部表操作，可能影响性能。")
 
-    # 规则 110: 检查是否存在"Hash Match"
-    hash_match_operations = root.findall(".//RelOp[@PhysicalOp='Hash Match']")
-    if hash_match_operations:
-        print("警告: 查询中存在'Hash Match'操作，这可能表示没有找到合适的索引。考虑优化查询或添加合适的索引。")
+    # 规则 110: 重复删除
 
     # 规则 111: 检查哈希连接
     hash_joins = root.findall(".//HashMatch[@JoinType='Inner']")
@@ -680,7 +677,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在大量的RID查找操作，这是堆查找，可能导致性能问题。考虑使用聚集索引。")
 
     # 规则 124: 检查Left Outer Join操作，可能意味着查询中有左外连接
-    left_outer_join_operations = root.findall(".//RelOp[@PhysicalOp='Left Outer Join']")
+    left_outer_join_operations = root.findall(".//*[@PhysicalOp='Left Outer Join']")
     if left_outer_join_operations:
         print("警告: 查询中存在Left Outer Join操作，考虑是否可以优化连接策略。")
 
@@ -901,20 +898,17 @@ def audit_execution_plan(plan_xml):
     if sort_ops:
         print("警告: 查询中存在Sort操作，大量的排序可能会消耗大量的CPU和内存。")
 
-    # 规则 168: 检查Compute Scalar操作
-    compute_scalar_ops = root.findall(".//ComputeScalar")
+    # 规则 168: 检查Compute Scalar操作 √
+    compute_scalar_ops = root.findall(".//*[@PhysicalOp='Compute Scalar']")
     if compute_scalar_ops:
-        print("警告: 查询中存在Compute Scalar操作，可能会导致额外的计算开销。")
+        print("警告: 查询中存在Compute Scalar操作，可能会导致额外的计算开销,并且可能有计算可以优化。")
 
     # 规则 169: 检查Sequence Project操作
     sequence_project_ops = root.findall(".//SequenceProject")
     if sequence_project_ops:
         print("警告: 查询中存在Sequence Project操作，可能会影响查询性能。")
 
-    # 规则 170: 检查Stream Aggregate操作
-    stream_aggregate_ops = root.findall(".//StreamAggregate")
-    if stream_aggregate_ops:
-        print("警告: 查询中存在Stream Aggregate操作，可能会导致I/O和CPU的额外负担。")
+    # 规则 170: 重复删除
 
     # 规则 171: 检查Convert操作
     convert_ops = root.findall(".//Convert")
@@ -966,10 +960,7 @@ def audit_execution_plan(plan_xml):
     if dynamic_sql_ops:
         print("警告: 查询中存在动态SQL操作，可能导致性能和安全问题。")
 
-    # 规则 181: 检查Sort操作，可能意味着查询正在对数据进行排序。
-    sort_operations = root.findall(".//RelOp[@PhysicalOp='Sort']")
-    if sort_operations:
-        print("警告: 查询中存在Sort操作，可能意味着查询正在对数据进行排序。考虑优化排序策略或使用索引。")
+    # 规则 181: 重复删除
 
     # 规则 182: 检查悬挂的外部连接
     unmatched_outer_joins = root.findall(".//UnmatchedOuterJoin")
@@ -1006,10 +997,7 @@ def audit_execution_plan(plan_xml):
     if recursive_cte:
         print("警告: 查询中使用了递归公共表达式，可能导致性能问题。")
 
-    # 规则 189: 检查是否存在"Hash Match"
-    hash_match_operations = root.findall(".//RelOp[@PhysicalOp='Hash Match']")
-    if hash_match_operations:
-        print("警告: 查询中存在'Hash Match'操作，这可能表示没有找到合适的索引。考虑优化查询或添加合适的索引。")
+    # 规则 189: 重复删除
 
     # 规则 190: 检查非参数化查询
     non_param_queries = root.findall(".//NonParameterizedQuery")
@@ -1022,7 +1010,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在顺序扫描，可能导致性能问题。")
 
     # 规则 192: 检查是否存在"Table Scan"
-    table_scan_operations = root.findall(".//RelOp[@PhysicalOp='Table Scan']")
+    table_scan_operations = root.findall(".//*[@PhysicalOp='Table Scan']")
     if table_scan_operations:
         print("警告: 查询中存在'Table Scan'操作，这通常比'Index Scan'慢。考虑优化查询或添加合适的索引。")
 
@@ -1067,25 +1055,16 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在大量的嵌套子查询，可能导致性能下降。考虑将部分子查询改写为连接或临时表。")
 
 
-    # 规则 201: 检查Hash Match操作，可能意味着查询需要优化
-    hash_matches = root.findall(".//RelOp[@PhysicalOp='Hash Match']")
-    if hash_matches:
-        print("警告: 查询中存在Hash Match操作，可能需要进一步优化。")
+    # 规则 201: 重复删除
 
     # 规则 202: 检查RID Lookup操作，可能意味着需要更好的索引
-    rid_lookups = root.findall(".//RelOp[@PhysicalOp='RID Lookup']")
+    rid_lookups = root.findall(".//*[@PhysicalOp='RID Lookup']")
     if rid_lookups:
         print("警告: 查询中存在RID Lookup操作，考虑优化相关索引。")
 
-    # 规则 203: 检查Nested Loops Join，当数据量大时可能不高效
-    nested_loops = root.findall(".//RelOp[@PhysicalOp='Nested Loops']")
-    if nested_loops:
-        print("警告: 查询中存在Nested Loops操作，可能需要进一步优化。")
+    # 规则 203: 重复删除
 
-    # 规则 204: 检查大量的Sort操作，可能影响性能
-    sort_operations = root.findall(".//RelOp[@PhysicalOp='Sort']")
-    if sort_operations:
-        print("警告: 查询中存在多个Sort操作，可能影响性能。")
+    # 规则 204: 重复删除
 
     # 规则 205: 检查Parallelism操作，可能意味着查询可以进一步优化
     parallelism_operations = root.findall(".//RelOp[@PhysicalOp='Parallelism']")
@@ -1097,75 +1076,67 @@ def audit_execution_plan(plan_xml):
     if filter_operations:
         print("警告: 查询中存在Filter操作，可能需要调整查询条件。")
 
-    # 规则 207: 检查Compute Scalar操作，可能影响性能
-    compute_scalars = root.findall(".//RelOp[@PhysicalOp='Compute Scalar']")
-    if compute_scalars:
-        print("警告: 查询中存在Compute Scalar操作，可能影响性能。")
+    # # 规则 207: 重复删除
 
     # 规则 208: 检查非优化的Bitmap操作
-    non_optimized_bitmaps = root.findall(".//RelOp[@PhysicalOp='Bitmap']")
+    non_optimized_bitmaps = root.findall(".//*[@PhysicalOp='Bitmap']")
     if non_optimized_bitmaps:
         print("警告: 查询中存在非优化的Bitmap操作，考虑进一步优化查询。")
 
     # 规则 209: 检查Sequence Project操作，可能意味着查询需要优化
-    sequence_projects = root.findall(".//RelOp[@PhysicalOp='Sequence Project']")
+    sequence_projects = root.findall(".//*[@PhysicalOp='Sequence Project']")
     if sequence_projects:
         print("警告: 查询中存在Sequence Project操作，可能需要进一步优化。")
 
-    # 规则 210: 检查流水线操作，可能意味着查询中的某些部分不高效
-    stream_aggregate = root.findall(".//RelOp[@PhysicalOp='Stream Aggregate']")
-    if stream_aggregate:
-        print("警告: 查询中存在Stream Aggregate操作，可能需要进一步优化。")
-
-    # ... [继续上述的代码]
+    # 规则 210: 重复删除
 
     # 规则 211: 检查存在的递归操作，可能影响性能
-    recursive_operations = root.findall(".//RelOp[@PhysicalOp='Recursive Union']")
+    recursive_operations = root.findall(".//*[@PhysicalOp='Recursive Union']")
     if recursive_operations:
         print("警告: 查询中存在递归操作，可能影响性能。")
 
     # 规则 212: 检查Hash Team操作，可能意味着需要更大的内存
-    hash_teams = root.findall(".//RelOp[@PhysicalOp='Hash Team']")
+    hash_teams = root.findall(".//*[@PhysicalOp='Hash Team']")
     if hash_teams:
         print("警告: 查询中存在Hash Team操作，考虑增加可用内存或优化查询。")
 
     # 规则 213: 检查存在的动态索引操作，可能影响性能
-    dynamic_indexes = root.findall(".//RelOp[@PhysicalOp='Dynamic Index']")
+    dynamic_indexes = root.findall(".//*[@PhysicalOp='Dynamic Index']")
     if dynamic_indexes:
         print("警告: 查询中存在动态索引操作，可能影响性能。")
 
     # 规则 214: 检查存在的动态排序操作，可能影响性能
-    dynamic_sorts = root.findall(".//RelOp[@PhysicalOp='Dynamic Sort']")
+    dynamic_sorts = root.findall(".//*[@PhysicalOp='Dynamic Sort']")
     if dynamic_sorts:
         print("警告: 查询中存在动态排序操作，可能影响性能。")
 
     # 规则 215: 检查存在的Bitmap Heap操作，可能意味着查询需要优化
-    bitmap_heaps = root.findall(".//RelOp[@PhysicalOp='Bitmap Heap']")
+    bitmap_heaps = root.findall(".//*[@PhysicalOp='Bitmap Heap']")
     if bitmap_heaps:
         print("警告: 查询中存在Bitmap Heap操作，考虑进一步优化查询。")
 
     # 规则 216: 检查存在的远程查询操作，可能意味着跨服务器查询不高效
-    remote_queries = root.findall(".//RelOp[@PhysicalOp='Remote Query']")
+    remote_queries = root.findall(".//*[@PhysicalOp='Remote Query']")
     if remote_queries:
         print("警告: 查询中存在远程查询操作，考虑优化跨服务器查询。")
 
     # 规则 217: 检查存在的流水线排序操作，可能影响性能
-    stream_sorts = root.findall(".//RelOp[@PhysicalOp='Stream Sort']")
+    stream_sorts = root.findall(".//*[@PhysicalOp='Stream Sort']")
     if stream_sorts:
         print("警告: 查询中存在Stream Sort操作，可能影响性能。")
 
     # 规则 218: 检查存在的窗口聚合操作，可能意味着查询需要优化
-    window_aggregates = root.findall(".//RelOp[@PhysicalOp='Window Aggregate']")
+    window_aggregates = root.findall(".//*[@PhysicalOp='Window Aggregate']")
     if window_aggregates:
         print("警告: 查询中存在窗口聚合操作，考虑进一步优化查询。")
 
     # 规则 219: 检查存在的列存储索引扫描，可能意味着列存储索引需要优化
-    columnstore_index_scans = root.findall(".//RelOp[@PhysicalOp='Columnstore Index Scan']")
+    columnstore_index_scans = root.findall(".//*[@PhysicalOp='Columnstore Index Scan']")
     if columnstore_index_scans:
         print("警告: 查询中存在列存储索引扫描操作，考虑优化列存储索引。")
 
     # 规则 220: 检查存在的分区操作，可能影响性能
-    partition_operations = root.findall(".//RelOp[@PhysicalOp='Partition']")
+    partition_operations = root.findall(".//*[@PhysicalOp='Partition']")
     if partition_operations:
         print("警告: 查询中存在分区操作，可能影响性能。")
 
@@ -1179,20 +1150,17 @@ def audit_execution_plan(plan_xml):
     if parallel_ops:
         print("警告: 查询中存在并行操作，可能意味着查询需要进一步优化。")
 
-    # 规则 223: 检查存在的Compute Scalar操作，这可能意味着有计算操作可以在查询中优化
-    compute_scalars = root.findall(".//RelOp[@PhysicalOp='Compute Scalar']")
-    if compute_scalars:
-        print("警告: 查询中存在Compute Scalar操作，考虑是否有计算可以优化。")
+    # # 规则 223：重复删除
 
     # 规则 224: 检查存在的顺序扫描，可能意味着缺少索引
     sequence_scans = root.findall(".//RelOp[@PhysicalOp='Sequence Project']")
     if sequence_scans:
         print("警告: 查询中存在顺序扫描，考虑添加适当的索引。")
 
-    # 规则 225: 检查存在的Table Spool操作，可能影响性能
-    table_spools = root.findall(".//RelOp[@PhysicalOp='Table Spool']")
+    # 规则 225: 检查存在的Table Spool操作，可能影响性能 √
+    table_spools = root.findall(".//*[@PhysicalOp='Table Spool']")
     if table_spools:
-        print("警告: 查询中存在Table Spool操作，可能影响性能。")
+        print("警告: 查询中存在Table Spool操作，这可能表示查询正在缓存某些结果以供稍后使用。考虑优化查询或内存配置。")
 
     # 规则 226: 检查存在的RID Lookup操作，可能意味着需要一个聚集索引
     rid_lookups = root.findall(".//RelOp[@PhysicalOp='RID Lookup']")
@@ -1205,29 +1173,23 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在Top操作，考虑是否真的需要返回那么多数据。")
 
     # 规则 228: 检查存在的Key Lookup操作，可能意味着非聚集索引缺失某些列
-    key_lookups = root.findall(".//RelOp[@PhysicalOp='Key Lookup']")
+    key_lookups = root.findall(".//*[@PhysicalOp='Key Lookup']")
     if key_lookups:
         print("警告: 查询中存在Key Lookup操作，考虑将查找的列包括在非聚集索引中。")
 
-    # 规则 229: 检查存在的Nested Loops操作，可能意味着连接不够高效
-    nested_loops = root.findall(".//RelOp[@PhysicalOp='Nested Loops']")
-    if nested_loops:
-        print("警告: 查询中存在Nested Loops操作，考虑优化查询或使用其他连接策略。")
+    # 规则 229: 重复删除
 
     # 规则 230: 检查存在的Bitmap操作，这可能影响性能
-    bitmaps = root.findall(".//RelOp[@PhysicalOp='Bitmap Create']")
+    bitmaps = root.findall(".//*[@PhysicalOp='Bitmap Create']")
     if bitmaps:
         print("警告: 查询中存在Bitmap操作，可能影响性能。")
 
-    # 规则 231: 检查存在的流操作，它可能表示数据排序并可能影响性能
-    stream_ops = root.findall(".//RelOp[@PhysicalOp='Stream Aggregate']")
+    # 规则 231: 检查存在的流操作，它可能表示数据排序并可能影响性能 √
+    stream_ops = root.findall(".//*[@PhysicalOp='Stream Aggregate']")
     if stream_ops:
-        print("警告: 查询中存在Stream Aggregate操作，可能表示数据排序并影响性能。")
+        print("警告: 查询中存在Stream Aggregate操作，可能会导致I/O和CPU的额外负担，表示数据排序并影响性能。")
 
-    # 规则 232: 检查Sort操作，它可能导致性能下降
-    sort_ops = root.findall(".//RelOp[@PhysicalOp='Sort']")
-    if sort_ops:
-        print("警告: 查询中存在Sort操作，考虑优化查询以减少或消除排序。")
+    # 规则 232: 重复删除
 
     # 规则 233: 检查存在的Remote Query操作，可能意味着跨服务器查询，这可能影响性能
     remote_queries = root.findall(".//RelOp[@PhysicalOp='Remote Query']")
@@ -1256,7 +1218,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在Bitmap Heap Scan操作，考虑添加索引以改善性能。")
 
     # 规则 238: 检查存在的动态序列扫描，可能表示查询中有动态生成的序列
-    dynamic_sequence_scans = root.findall(".//RelOp[@PhysicalOp='Dynamic Sequence Project']")
+    dynamic_sequence_scans = root.findall(".//*[@PhysicalOp='Dynamic Sequence Project']")
     if dynamic_sequence_scans:
         print("警告: 查询中存在Dynamic Sequence Project操作，可能影响性能。")
 
@@ -1291,7 +1253,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在RID Lookup操作，可能需要聚集索引来改善性能。")
 
     # 规则 245: 检查Adaptive Join操作，可能影响性能
-    adaptive_joins = root.findall(".//RelOp[@PhysicalOp='Adaptive Join']")
+    adaptive_joins = root.findall(".//*[@PhysicalOp='Adaptive Join']")
     if adaptive_joins:
         print("警告: 查询中存在Adaptive Join操作，可能影响性能。")
 
@@ -1306,7 +1268,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中使用了表变量，它们可能没有统计信息并导致性能问题。")
 
     # 规则 248: 检查Compute Scalar操作，大量的Compute Scalar可能影响性能
-    compute_scalars = root.findall(".//RelOp[@PhysicalOp='Compute Scalar']")
+    compute_scalars = root.findall(".//*[@PhysicalOp='Compute Scalar']")
     if len(compute_scalars) > 5:
         print("警告: 查询中存在大量的Compute Scalar操作，可能影响性能。")
 
@@ -1320,9 +1282,7 @@ def audit_execution_plan(plan_xml):
     if len(spool_ops) > 3:
         print("警告: 查询中存在大量的Spool操作，可能影响性能。")
 
-    # 规则 251: 检查Sort操作，因为它们可能导致内存中的数据溢出到磁盘
-    sort_ops = root.findall(".//RelOp[@PhysicalOp='Sort']")
-    if sort_ops:
+    # 规则 251:重复删除
         print("警告: 查询中存在Sort操作，这可能导致内存中的数据溢出到磁盘，影响性能。")
 
     # 规则 252: 检查存在的外部表操作，这可能表示跨数据库或远程查询
@@ -1331,22 +1291,22 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在远程查询操作，可能影响性能。考虑将数据本地化。")
 
     # 规则 253: 检查Bitmap操作，因为它们可能导致CPU使用率增加
-    bitmap_ops = root.findall(".//RelOp[@PhysicalOp='Bitmap']")
+    bitmap_ops = root.findall(".//*[@PhysicalOp='Bitmap']")
     if bitmap_ops:
         print("警告: 查询中存在Bitmap操作，这可能导致CPU使用率增加。")
 
-    # 规则 254: 检查存在的流聚合，因为在大数据集上可能不高效
-    stream_aggregates = root.findall(".//RelOp[@PhysicalOp='Stream Aggregate']")
+    # 规则 254: 检查存在的流聚合，因为在大数据集上可能不高效 √
+    stream_aggregates = root.findall(".//*[@PhysicalOp='Stream Aggregate']")
     if stream_aggregates:
         print("警告: 查询中存在流聚合操作，这在大数据集上可能不高效。")
 
     # 规则 255: 检查存在的窗口聚合，因为它们可能影响性能
-    window_aggs = root.findall(".//RelOp[@PhysicalOp='Window Aggregate']")
+    window_aggs = root.findall(".//*[@PhysicalOp='Window Aggregate']")
     if window_aggs:
         print("警告: 查询中存在窗口聚合操作，这可能影响性能。")
 
     # 规则 256: 检查存在的序列投影，它们可能导致内存压力
-    sequence_projections = root.findall(".//RelOp[@PhysicalOp='Sequence Project']")
+    sequence_projections = root.findall(".//*[@PhysicalOp='Sequence Project']")
     if sequence_projections:
         print("警告: 查询中存在序列投影操作，这可能导致内存压力。")
 
@@ -1361,19 +1321,16 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在哈希匹配部分连接，这可能导致内存中的数据溢出到磁盘。")
 
     # 规则 259: 检查存在的懒惰溢出，因为这可能表示内存压力
-    lazy_spools = root.findall(".//RelOp[@PhysicalOp='Lazy Spool']")
+    lazy_spools = root.findall(".//*[@PhysicalOp='Lazy Spool']")
     if lazy_spools:
         print("警告: 查询中存在懒惰溢出操作，这可能表示内存压力。")
 
     # 规则 260: 检查存在的非优化的嵌套循环，因为它们可能是性能瓶颈
-    non_opt_loops = root.findall(".//RelOp[@PhysicalOp='Non-Optimized Nested Loops']")
+    non_opt_loops = root.findall(".//*[@PhysicalOp='Non-Optimized Nested Loops']")
     if non_opt_loops:
         print("警告: 查询中存在非优化的嵌套循环操作，这可能是性能瓶颈。")
 
-    # 规则 261: 检查是否存在过多的计算列
-    computed_columns = root.findall(".//ComputeScalar")
-    if len(computed_columns) > 5:
-        print("警告: 查询中存在过多的计算列，可能导致CPU负担增加。")
+    # 规则 261: 重复删除
 
     # 规则 262: 检查是否使用了全文搜索
     full_text_search = root.findall(".//Contains")
@@ -1596,56 +1553,43 @@ def audit_execution_plan(plan_xml):
     if top_operations:
         print("警告: 查询中存在Top操作，考虑进一步优化查询。")
 
-    # 规则 302: 检查Sort操作，可能意味着查询不高效
-    sort_operations = root.findall(".//RelOp[@PhysicalOp='Sort']")
-    if sort_operations:
-        print("警告: 查询中存在Sort操作，考虑是否可以通过索引或其他方式优化。")
+    # 规则 302: 重复删除
 
-    # 规则 303: 检查Hash Match操作，可能意味着查询需要大量的内存
-    hash_match_operations = root.findall(".//RelOp[@PhysicalOp='Hash Match']")
-    if hash_match_operations:
-        print("警告: 查询中存在Hash Match操作，这可能需要大量的内存。考虑优化查询或增加内存。")
-
-    # 规则 304: 检查Clustered Index Scan和Table Scan操作，可能意味着查询不高效
+    # 规则 303: 重复删除
+    # 规则 304: 检查Clustered Index Scan和Table Scan操作，可能意味着查询不高效 √
     # 分解查询为两个单独的查询
-    clustered_index_scans = root.findall(".//RelOp[@PhysicalOp='Clustered Index Scan']")
-    table_scans = root.findall(".//RelOp[@PhysicalOp='Table Scan']")
+    clustered_index_scans = root.findall(".//*[@PhysicalOp='Clustered Index Scan']")
+    table_scans = root.findall(".//*[@PhysicalOp='Table Scan']")
     # 合并结果
     scan_operations = clustered_index_scans + table_scans
     if scan_operations:
         print("警告: 查询中存在Clustered Index Scan或Table Scan操作，可能导致性能下降。考虑是否可以优化索引策略。")
 
-    # 规则 305: 检查是否存在扫描操作而不是查找操作，这可能意味着缺失索引
+    # 规则 305: 检查是否存在扫描操作而不是查找操作，这可能意味着缺失索引√
     # 分解查询为两个单独的查询
-    clustered_index_scans_305 = root.findall(".//RelOp[@PhysicalOp='Clustered Index Scan']")
-    table_scans_305 = root.findall(".//RelOp[@PhysicalOp='Table Scan']")
+    clustered_index_scans_305 = root.findall(".//*[@PhysicalOp='Clustered Index Scan']")
+    table_scans_305 = root.findall(".//*[@PhysicalOp='Table Scan']")
     # 合并结果
     scan_operations_305 = clustered_index_scans_305 + table_scans_305
     if scan_operations_305:
         print("警告: 查询中使用了扫描操作而不是查找操作，可能意味着缺少适当的索引。")
 
     # 规则 306: 检查Parallelism操作，可能意味着查询需要多个线程并行执行
-    parallel_operations = root.findall(".//RelOp[@PhysicalOp='Parallelism']")
+    parallel_operations = root.findall(".//*[@PhysicalOp='Parallelism']")
     if parallel_operations:
         print("警告: 查询中存在Parallelism操作，这可能意味着查询需要多个线程并行执行，可能导致线程争用。")
 
-    # 规则 307: 检查Compute Scalar操作，可能意味着查询中有复杂的计算
-    compute_scalar_operations = root.findall(".//RelOp[@PhysicalOp='Compute Scalar']")
-    if compute_scalar_operations:
-        print("警告: 查询中存在Compute Scalar操作，考虑是否可以简化查询中的计算。")
+    # 规则 307: 重复删除
 
-    # 规则 308: 检查Nested Loops操作，这可能表示查询中有循环连接。
-    nested_loops_operations = root.findall(".//RelOp[@PhysicalOp='Nested Loops']")
+    # 规则 308: 检查Nested Loops操作，这可能表示查询中有循环连接。√
+    nested_loops_operations = root.findall(".//*[@PhysicalOp='Nested Loops']")
     if nested_loops_operations:
         print("警告: 查询中存在Nested Loops操作，这可能表示查询中有循环连接。考虑优化连接策略或使用索引。")
 
-    # 规则 309: 检查Hash Match操作，这可能表示查询中有哈希连接。
-    hash_match_operations = root.findall(".//RelOp[@PhysicalOp='Hash Match']")
-    if hash_match_operations:
-        print("警告: 查询中存在Hash Match操作，这可能表示查询中有哈希连接。考虑优化连接策略或使用索引。")
+    # 规则 309: 重复删除
 
     # 规则 310: 检查Merge Join操作，这可能表示查询中有合并连接。
-    merge_join_operations = root.findall(".//RelOp[@PhysicalOp='Merge Join']")
+    merge_join_operations = root.findall(".//*[@PhysicalOp='Merge Join']")
     if merge_join_operations:
         print("警告: 查询中存在Merge Join操作，这可能表示查询中有合并连接。考虑优化连接策略或使用索引。")
 
@@ -1659,110 +1603,95 @@ def audit_execution_plan(plan_xml):
     if constant_scan_operations:
         print("警告: 查询中存在Constant Scan操作，考虑避免使用硬编码的常量值。")
 
-    # 规则 313: 检查Stream Aggregate操作，可能意味着查询中有聚合操作
-    stream_aggregate_operations = root.findall(".//RelOp[@PhysicalOp='Stream Aggregate']")
-    if stream_aggregate_operations:
-        print("警告: 查询中存在Stream Aggregate操作，考虑优化聚合或使用索引。")
+    # 规则 313: 重复删除
 
-    # 规则 314: 检查Compute Scalar操作，这可能表示查询正在计算某些值。
-    compute_scalar_operations = root.findall(".//RelOp[@PhysicalOp='Compute Scalar']")
-    if compute_scalar_operations:
-        print("警告: 查询中存在Compute Scalar操作，这可能表示查询正在计算某些值。考虑优化查询或使用计算列。")
+    # 规则 314: 重复删除
 
     # 规则 315: 检查Filter操作，可能意味着查询在获取数据后进行过滤。
-    filter_operations = root.findall(".//RelOp[@PhysicalOp='Filter']")
+    filter_operations = root.findall(".//*[@PhysicalOp='Filter']")
     if filter_operations:
         print("警告: 查询中存在Filter操作，可能意味着查询在获取数据后进行过滤。考虑在数据获取前进行过滤，或优化查询条件。")
 
     # 规则 316: 检查Constant Scan操作，这可能表示查询从一个常量集合中获取数据。
-    constant_scan_operations = root.findall(".//RelOp[@PhysicalOp='Constant Scan']")
+    constant_scan_operations = root.findall(".//*[@PhysicalOp='Constant Scan']")
     if constant_scan_operations:
         print("警告: 查询中存在Constant Scan操作，这可能表示查询从一个常量集合中获取数据。")
 
     # 规则 317: 检查Sequence Project操作，可能与窗口函数或其他排序操作有关。
-    sequence_project_operations = root.findall(".//RelOp[@PhysicalOp='Sequence Project']")
+    sequence_project_operations = root.findall(".//*[@PhysicalOp='Sequence Project']")
     if sequence_project_operations:
         print("警告: 查询中存在Sequence Project操作，可能与窗口函数或其他排序操作有关。考虑优化查询。")
 
-    # 规则 318: 检查Segment操作，可能与窗口函数或分段操作有关。
-    segment_operations = root.findall(".//RelOp[@PhysicalOp='Segment']")
+    # 规则 318: 检查Segment操作，可能与窗口函数或分段操作有关。√
+    segment_operations = root.findall(".//*[@PhysicalOp='Segment']")
     if segment_operations:
         print("警告: 查询中存在Segment操作，可能与窗口函数或分段操作有关。考虑优化查询。")
 
     # 规则 319: 检查Assert操作，可能意味着查询正在验证某些条件。
-    assert_operations = root.findall(".//RelOp[@PhysicalOp='Assert']")
+    assert_operations = root.findall(".//*[@PhysicalOp='Assert']")
     if assert_operations:
         print("警告: 查询中存在Assert操作，可能意味着查询正在验证某些条件。考虑优化查询或验证条件。")
 
-    # 规则 320: 检查Sort操作，可能意味着查询正在排序数据
-    sort_operations = root.findall(".//RelOp[@PhysicalOp='Sort']")
-    if sort_operations:
-        print("警告: 查询中存在Sort操作，可能意味着查询正在排序数据。考虑优化或使用索引来避免排序。")
+    # 规则 320: 重复删除
 
     # 规则 321: 检查Table Scan操作，可能意味着查询正在全表扫描
     table_scan_operations = root.findall(".//RelOp[@PhysicalOp='Table Scan']")
     if table_scan_operations:
         print("警告: 查询中存在Table Scan操作，可能意味着查询正在全表扫描。考虑优化或使用索引。")
 
-    # 规则 322: 检查Table Spool操作，可能意味着查询正在使用临时表
-    table_spool_operations = root.findall(".//RelOp[@PhysicalOp='Table Spool']")
-    if table_spool_operations:
-        print("警告: 查询中存在Table Spool操作，可能意味着查询正在使用临时表。考虑优化或避免使用临时表。")
+    # 规则 322: 重复删除
 
     # 规则 323: 检查Table-valued function操作，可能影响性能
-    tvf_operations = root.findall(".//RelOp[@PhysicalOp='Table-valued function']")
+    tvf_operations = root.findall(".//*[@PhysicalOp='Table-valued function']")
     if tvf_operations:
         print("警告: 查询中存在Table-valued function操作，可能影响性能。考虑优化或避免使用表值函数。")
 
     # 规则 324: 检查Union操作，可能意味着查询正在合并结果集
-    union_operations = root.findall(".//RelOp[@PhysicalOp='Union']")
+    union_operations = root.findall(".//*[@PhysicalOp='Union']")
     if union_operations:
         print("警告: 查询中存在Union操作，可能意味着查询正在合并结果集。考虑优化或避免使用Union。")
 
     # 规则 325: 检查Update操作，可能意味着查询正在更新数据
-    update_operations = root.findall(".//RelOp[@PhysicalOp='Update']")
+    update_operations = root.findall(".//*[@PhysicalOp='Update']")
     if update_operations:
         print("警告: 查询中存在Update操作，可能意味着查询正在更新数据。")
 
     # 规则 326: 检查Adaptive Join操作，可能意味着查询优化器在运行时选择了最佳的连接策略
-    adaptive_join_operations = root.findall(".//RelOp[@PhysicalOp='Adaptive Join']")
+    adaptive_join_operations = root.findall(".//*[@PhysicalOp='Adaptive Join']")
     if adaptive_join_operations:
         print("警告: 查询中存在Adaptive Join操作，这可能意味着查询优化器在运行时选择了最佳的连接策略。")
 
     # 规则 327: 检查Bulk Insert操作，可能与插入大量数据有关
-    bulk_insert_operations = root.findall(".//RelOp[@PhysicalOp='Bulk Insert']")
+    bulk_insert_operations = root.findall(".//*[@PhysicalOp='Bulk Insert']")
     if bulk_insert_operations:
         print("警告: 查询中存在Bulk Insert操作，考虑优化大量数据插入策略。")
 
     # 规则 328: 检查Columnstore Index Scan操作，可能与列存储索引扫描有关
-    columnstore_index_scan_operations = root.findall(".//RelOp[@PhysicalOp='Columnstore Index Scan']")
+    columnstore_index_scan_operations = root.findall(".//*[@PhysicalOp='Columnstore Index Scan']")
     if columnstore_index_scan_operations:
         print("警告: 查询中存在Columnstore Index Scan操作，考虑优化列存储索引策略。")
 
     # 规则 329: 检查Concatenation操作，可能与多个数据集合连接有关
-    concatenation_operations = root.findall(".//RelOp[@PhysicalOp='Concatenation']")
+    concatenation_operations = root.findall(".//*[@PhysicalOp='Concatenation']")
     if concatenation_operations:
         print("警告: 查询中存在Concatenation操作，考虑优化数据集合连接策略。")
 
     # 规则 330: 检查Full Outer Join操作，可能意味着查询中有全外连接
-    full_outer_join_operations = root.findall(".//RelOp[@PhysicalOp='Full Outer Join']")
+    full_outer_join_operations = root.findall(".//*[@PhysicalOp='Full Outer Join']")
     if full_outer_join_operations:
         print("警告: 查询中存在Full Outer Join操作，考虑是否可以优化连接策略。")
 
     # 规则 331: 检查Parallelism操作，可能意味着查询试图并行执行，但可能受到某些限制
-    parallelism_operations = root.findall(".//RelOp[@PhysicalOp='Parallelism']")
+    parallelism_operations = root.findall(".//*[@PhysicalOp='Parallelism']")
     if parallelism_operations:
         print(
             "警告: 查询中存在Parallelism操作，这可能意味着查询试图并行执行，但可能受到某些限制。考虑优化并行策略或增加资源。")
     # 规则 332: 检查Bitmap操作，可能与哈希连接或某些索引扫描操作有关。
-    bitmap_operations = root.findall(".//RelOp[@PhysicalOp='Bitmap']")
+    bitmap_operations = root.findall(".//*[@PhysicalOp='Bitmap']")
     if bitmap_operations:
         print("警告: 查询中存在Bitmap操作，可能与哈希连接或某些索引扫描操作有关。考虑优化连接策略或查询结构。")
 
-    # 规则 333: 检查Table Spool操作，这可能表示查询正在缓存某些结果以供稍后使用。
-    table_spool_operations = root.findall(".//RelOp[@PhysicalOp='Table Spool']")
-    if table_spool_operations:
-        print("警告: 查询中存在Table Spool操作，这可能表示查询正在缓存某些结果以供稍后使用。考虑优化查询或内存配置。")
+    # 规则 333: 重复删除
 
     # 规则 334: 检查Window Spool操作，可能与窗口函数有关。
     window_spool_operations = root.findall(".//RelOp[@PhysicalOp='Window Spool']")
@@ -1833,18 +1762,18 @@ def audit_execution_plan(plan_xml):
        print("警告: 查询中存在不必要的数据转换。")
 
     # 规则 346: 检查是否有过多的物理I / O操作:
-    physical_io_ops = root.findall(".//RelOp[@PhysicalIO='High']")
+    physical_io_ops = root.findall(".//*[@PhysicalIO='High']")
     if physical_io_ops:
        print("警告: 存在高物理I/O操作。考虑优化存储或查询。")
 
     #规则 347: 检查是否有大量的内存操作:
-    memory_heavy_ops = root.findall(".//RelOp[@MemoryUsage='High']")
+    memory_heavy_ops = root.findall(".//*[@MemoryUsage='High']")
     if memory_heavy_ops:
        print("警告: 存在高内存使用操作。考虑优化查询或增加资源。")
 
     #复合型规则
     # 复合规则 1 : 检查复杂的表扫描与不同的过滤条件
-    tables_scanned = root.findall(".//RelOp[@PhysicalOp='Table Scan']")
+    tables_scanned = root.findall(".//*[@PhysicalOp='Table Scan']")
     filtered_tables = set()
     for table in tables_scanned:
         filters = table.findall(".//Filter")
@@ -1859,7 +1788,7 @@ def audit_execution_plan(plan_xml):
     joins = []
     join_types = ['Nested Loops', 'Hash Match', 'Merge Join']
     for jt in join_types:
-        joins.extend(root.findall(f".//RelOp[@PhysicalOp='{jt}']"))
+        joins.extend(root.findall(f".//*[@PhysicalOp='{jt}']"))
 
     for join in joins:
         join_cols = join.findall(".//ColumnReference")
@@ -1868,20 +1797,31 @@ def audit_execution_plan(plan_xml):
                 if not col.get('IsIndexed'):
                     print(f"警告: 连接操作中的字段{col.get('Column')}没有被索引，可能导致性能问题。")
 
+
+
     # 复合规则 3: 检查排序后的连接
-    sorts = root.findall(".//RelOp[@PhysicalOp='Sort']")
+    # 创建一个字典来保存每个元素的父元素
+    parent_map = {c: p for p in root.iter() for c in p}
+    sorts = root.findall(".//*[@PhysicalOp='Sort']")
     for sort in sorts:
-        order_by_cols = sort.findall(".//OrderBy")
-        next_op = sort.getnext()
-        if next_op.tag == 'RelOp' and next_op.get('PhysicalOp') in ['Nested Loops', 'Hash Match', 'Merge Join']:
-            join_cols = next_op.findall(".//ColumnReference")
-            if not any(col.get('Column') for col in join_cols if
-                       col.get('Column') in [ob.get('Column') for ob in order_by_cols]):
-                print(
-                    "警告: 在一个排序操作之后直接跟随一个连接操作，而排序的字段并不是连接的字段，可能意味着排序可以在查询的后期进行以提高效率。")
+            parent = parent_map[sort]
+            sort_index = list(parent).index(sort)
+            next_op = None
+            if sort_index < len(parent) - 1:
+                next_op = parent[sort_index + 1]
+
+            if next_op is not None and next_op.tag == 'RelOp' and next_op.get('PhysicalOp') in ['Nested Loops',
+                                                                                                'Hash Match',
+                                                                                                'Merge Join']:
+                order_by_cols = sort.findall(".//OrderBy")
+                join_cols = next_op.findall(".//ColumnReference")
+                if not any(col.get('Column') for col in join_cols if
+                           col.get('Column') in [ob.get('Column') for ob in order_by_cols]):
+                    print(
+                        "警告: 在一个排序操作之后直接跟随一个连接操作，而排序的字段并不是连接的字段，可能意味着排序可以在查询的后期进行以提高效率。")
 
     # 复合规则 4：嵌套循环连接后跟排序操作:
-    nested_loops = root.findall(".//RelOp[@PhysicalOp='Nested Loops Join']")
+    nested_loops = root.findall(".//*[@PhysicalOp='Nested Loops Join']")
     for nl in nested_loops:
         next_sibling = nl.getnext()  # 获取下一个相邻元素
         if next_sibling is not None and next_sibling.get('PhysicalOp') == 'Sort':
@@ -1890,7 +1830,7 @@ def audit_execution_plan(plan_xml):
     # 复合规则 5：同一个表的多次不同方式连接:
     table_name = 'TableName'
     # 获取所有连接操作
-    joins = root.findall(".//RelOp[@Table='{}']".format(table_name))
+    joins = root.findall(".//*[@Table='{}']".format(table_name))
     join_types = set([join.get("PhysicalOp") for join in joins])
 
     # 检查是否有多于一种连接方式
@@ -1907,8 +1847,8 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询使用了多个索引但没有聚合操作。可能存在索引冗余。")
 
     # 复合规则 7: 检查多表连接的执行顺序
-    hash_joins = root.findall(".//RelOp[@PhysicalOp='Hash Join']")
-    merge_joins = root.findall(".//RelOp[@PhysicalOp='Merge Join']")
+    hash_joins = root.findall(".//*[@PhysicalOp='Hash Join']")
+    merge_joins = root.findall(".//*[@PhysicalOp='Merge Join']")
     joins = hash_joins + merge_joins
 
     for join in joins:
@@ -1917,14 +1857,14 @@ def audit_execution_plan(plan_xml):
             print("警告: 考虑更改连接顺序以优化性能。")
 
     # 复合规则 8: 检查多个相似的索引扫描或查找
-    index_scans = root.findall(".//RelOp[@PhysicalOp='Index Scan']")
-    index_seeks = root.findall(".//RelOp[@PhysicalOp='Index Seek']")
+    index_scans = root.findall(".//*[@PhysicalOp='Index Scan']")
+    index_seeks = root.findall(".//*[@PhysicalOp='Index Seek']")
     all_index_operations = index_scans + index_seeks
     if len(all_index_operations) > 2:  # 假设相同的索引操作出现超过2次
         print("警告: 查询中存在多个相似的索引操作，考虑重写查询或优化索引。")
 
     # 复合规则 9: 检查多个大表的交叉连接
-    cross_joins = root.findall(".//RelOp[@PhysicalOp='Nested Loops']")
+    cross_joins = root.findall(".//*[@PhysicalOp='Nested Loops']")
     cross_joins = [join for join in cross_joins if join.get('LogicalOp') == 'Cross Join']
 
     if cross_joins:
@@ -1934,14 +1874,14 @@ def audit_execution_plan(plan_xml):
             print("警告: 查询中存在多个大表的交叉连接，可能导致性能问题。")
 
     # 复合规则 10: 检查多阶段聚合
-    aggregates = root.findall(".//RelOp[@PhysicalOp='Hash Match']")
+    aggregates = root.findall(".//*[@PhysicalOp='Hash Match']")
     aggregates = [agg for agg in aggregates if agg.get('LogicalOp') == 'Aggregate']
 
     if len(aggregates) > 1:
         print("警告: 查询中存在多阶段聚合操作，可能导致性能问题。")
 
     # 复合规则 11: 检查同一表的多个索引扫描
-    index_scans = root.findall(".//RelOp[@PhysicalOp='Index Scan']")
+    index_scans = root.findall(".//*[@PhysicalOp='Index Scan']")
     tables_with_multiple_scans = set()
     for scan in index_scans:
         table_name = scan.find(".//Object[@Table]").get('Table')
@@ -1951,8 +1891,8 @@ def audit_execution_plan(plan_xml):
             tables_with_multiple_scans.add(table_name)
 
     # 复合规则 12: 高开销操作与低选择性过滤器的组合
-    high_cost_ops_table_scan = root.findall(".//RelOp[@PhysicalOp='Table Scan']")
-    high_cost_ops_index_scan = root.findall(".//RelOp[@PhysicalOp='Clustered Index Scan']")
+    high_cost_ops_table_scan = root.findall(".//*[@PhysicalOp='Table Scan']")
+    high_cost_ops_index_scan = root.findall(".//*[@PhysicalOp='Clustered Index Scan']")
     high_cost_ops = high_cost_ops_table_scan + high_cost_ops_index_scan
 
     if high_cost_ops:
@@ -1968,11 +1908,11 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中多次引用了相同的、计算成本高的子查询。考虑使用CTE或临时表优化。")
 
     # 复合规则 14: 排序操作后的缺失索引
-    sort_ops = root.findall(".//RelOp[@PhysicalOp='Sort']")
-    if sort_ops:
-        post_sort_ops_without_index = sort_ops[0].findall(".//RelOp[not(@Index)]")
-        if post_sort_ops_without_index:
-            print("警告: 在排序操作之后进行了需要索引的操作，但相关字段没有索引。考虑添加索引。")
+    sort_ops = root.findall(".//*[@PhysicalOp='Sort']")
+    for sort_op in sort_ops:
+            post_sort_ops_without_index = [op for op in sort_op.findall(".//RelOp") if not op.get('Index')]
+            if post_sort_ops_without_index:
+                print("警告: 在排序操作之后进行了需要索引的操作，但相关字段没有索引。考虑添加索引。")
 
     # 复合规则 15: 过度的并行操作
     parallel_ops = root.findall(".//RelOp[@Parallel='1']")
@@ -1980,21 +1920,26 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中有过多的并行操作。考虑调整并行策略。")
 
     # 复合规则 16: 检查排序和连接的顺序是否优化
-    sort_elements = root.findall(".//RelOp[@PhysicalOp='Sort']")
-
+    # 创建元素到父元素的映射
+    element_to_parent_map = {c: p for p in root.iter() for c in p}
+    sort_elements = root.findall(".//*[@PhysicalOp='Sort']")
     for sort_element in sort_elements:
-        next_sibling = sort_element.getnext()  # 获取下一个同级元素
+        parent = element_to_parent_map[sort_element]  # 获取父元素
+        siblings = list(parent)  # 获取父元素的所有子元素
+        index = siblings.index(sort_element)  # 找到当前元素的索引
+        next_sibling = siblings[index + 1] if index + 1 < len(siblings) else None  # 获取下一个同级元素
+
         if next_sibling is not None and next_sibling.get('PhysicalOp') in ['Merge Join', 'Hash Match Join']:
             print("警告: 排序和连接的顺序可能未优化。考虑调整查询。")
             break
 
     # 复合规则 17: 检查是否有多个全表扫描
-    full_table_scans = root.findall(".//RelOp[@PhysicalOp='Table Scan']")
+    full_table_scans = root.findall(".//*[@PhysicalOp='Table Scan']")
     if len(full_table_scans) > 1:
         print("警告: 查询中存在多个全表扫描，可能导致性能下降。考虑添加索引。")
 
     # 复合规则 18: 检查是否有多个远程查询
-    remote_queries = root.findall(".//RelOp[@PhysicalOp='Remote Query']")
+    remote_queries = root.findall(".//*[@PhysicalOp='Remote Query']")
     if len(remote_queries) > 2:
         print("警告: 查询中存在多个远程查询操作，可能导致网络开销增加。考虑优化远程查询。")
 
@@ -2009,7 +1954,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在多个计算后跟过滤的操作。考虑优化计算与过滤的顺序。")
 
     # 复合规则 20: 检查多个分区操作与索引扫描的组合
-    partition_operations = root.findall(".//RelOp[@PhysicalOp='Partition']")
+    partition_operations = root.findall(".//*[@PhysicalOp='Partition']")
     index_scans_after_partition = [p.findall(".//IndexScan") for p in partition_operations]
     if any(index_scans_after_partition):
         print("警告: 查询中存在多个分区操作与索引扫描的组合。考虑优化分区策略。")
@@ -2043,7 +1988,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在多个嵌套子查询的使用。考虑优化子查询结构。")
 
     # 复合规则 22: 当查询同时包含多个高成本操作时警告
-    high_cost_operations = root.findall(".//RelOp[@EstimatedTotalSubtreeCost>10]")  # 假设10为高成本阈值
+    high_cost_operations = root.findall(".//*[@EstimatedTotalSubtreeCost>10]")  # 假设10为高成本阈值
     if len(high_cost_operations) > 2:
         print("警告: 查询中存在多个高成本操作。")
 
@@ -2095,13 +2040,13 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中存在多个连接操作但没有相应的过滤条件。")
 
     # 复合规则 26: 当查询使用了多个全表扫描操作时警告
-    full_table_scans = root.findall(".//RelOp[@PhysicalOp='Table Scan']")
+    full_table_scans = root.findall(".//*[@PhysicalOp='Table Scan']")
     if len(full_table_scans) > 1:
         print("警告: 查询中使用了多个全表扫描操作。")
 
     # 复合规则 27: 当一个查询内部存在多次对同一存储过程或函数的调用时警告
-    udf_calls = root.findall(".//RelOp[@NodeType='UDF']")
-    stored_proc_calls = root.findall(".//RelOp[@NodeType='StoredProc']")
+    udf_calls = root.findall(".//*[@NodeType='UDF']")
+    stored_proc_calls = root.findall(".//*[@NodeType='StoredProc']")
 
     proc_or_func_calls = udf_calls + stored_proc_calls
 
@@ -2109,12 +2054,12 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询内部存在多次对同一存储过程或函数的调用。")
 
     # 复合规则 28: 当查询中有多个并行操作，但CPU利用率低时警告
-    parallel_operations = root.findall(".//RelOp[@Parallel='1']")
+    parallel_operations = root.findall(".//*[@Parallel='1']")
     if len(parallel_operations) > 2:  # 假设存在超过2个并行操作
         print("警告: 查询中存在多个并行操作，可能导致CPU资源未充分利用。")
 
     # 复合规则 29: 当查询中存在多个递归操作时警告
-    recursive_operations = root.findall(".//RelOp[@NodeType='Recursive']")
+    recursive_operations = root.findall(".//*[@NodeType='Recursive']")
     if recursive_operations:
         print("警告: 查询中存在多个递归操作，可能导致性能问题。")
 
@@ -2126,9 +2071,9 @@ def audit_execution_plan(plan_xml):
     # 复合规则 31: 当查询中存在多个重复的连接条件时警告
     join_conditions = {}
 
-    nested_loops_joins = root.findall(".//RelOp[@PhysicalOp='Nested Loops Join']")
-    merge_joins = root.findall(".//RelOp[@PhysicalOp='Merge Join']")
-    hash_match_joins = root.findall(".//RelOp[@PhysicalOp='Hash Match Join']")
+    nested_loops_joins = root.findall(".//*[@PhysicalOp='Nested Loops Join']")
+    merge_joins = root.findall(".//*[@PhysicalOp='Merge Join']")
+    hash_match_joins = root.findall(".//*[@PhysicalOp='Hash Match Join']")
 
     joins = nested_loops_joins + merge_joins + hash_match_joins
 
@@ -2174,7 +2119,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中同时存在并行和串行操作。混合使用可能导致不稳定的查询性能。考虑检查并行设置和适当调整查询。")
 
     # 复合规则 37: 检查是否存在多个非聚集索引扫描
-    index_scans = root.findall(".//RelOp[@PhysicalOp='Index Scan']")
+    index_scans = root.findall(".//*[@PhysicalOp='Index Scan']")
     non_clustered_index_scans = [scan for scan in index_scans if 'CLUSTERED' not in scan.get('Index', '')]
 
     if len(non_clustered_index_scans) > 1:
@@ -2189,7 +2134,7 @@ def audit_execution_plan(plan_xml):
         print("警告: 查询中使用了LIKE操作符与通配符开始的字符串，这会导致全索引扫描，影响查询效率。考虑避免使用通配符开头的LIKE模式。")
 
     # 复合规则 39: 检查查询是否涉及大量数据的排序
-    sort_operations = root.findall(".//RelOp[@PhysicalOp='Sort']")
+    sort_operations = root.findall(".//*[@PhysicalOp='Sort']")
     large_sort_operations = [op for op in sort_operations if float(op.get('EstimatedRows', 0)) > 10000]
 
     if large_sort_operations:
@@ -2235,23 +2180,3 @@ def audit_execution_plan(plan_xml):
         print("警告: 使用NOT IN或NOT EXISTS可能导致全表扫描，影响性能。考虑使用左连接或其他方法替代。")
 
     print("执行计划审计完成。")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
