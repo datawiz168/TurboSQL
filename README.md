@@ -1,4 +1,5 @@
-## sql-server-sql-rule
+## TurboSQL
+
 
 ### 基于规则的 SQL Server SQL 审计调优工具
 
