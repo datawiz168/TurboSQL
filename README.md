@@ -1,7 +1,7 @@
 ## TurboSQL
 
 
-### 基于规则的 SQL Server SQL 审计调优工具
+### SQL Server SQL 审计调优工具
 
 #### 主要功能
 
